@@ -1,4 +1,11 @@
-# Placeholder services; fill ./services/* once the stack is chosen (see docs/planning/02-implementation-plan.md)
+# One image, three roles. `docker compose up --build` runs db, redis, migrate (one-shot), worker, api.
+x-app: &app
+  build: .
+  env_file: .env
+  environment:
+    DATABASE_URL: postgres://${POSTGRES_USER:-jobsearch}:${POSTGRES_PASSWORD:-jobsearch}@db:5432/${POSTGRES_DB:-jobsearch}
+    REDIS_URL: redis://redis:6379
+
 services:
   db:
     image: postgres:16-alpine
@@ -26,31 +33,36 @@ services:
       timeout: 3s
       retries: 10
 
-  worker:
-    build: ./services/worker
-    env_file: .env
+  migrate:
+    <<: *app
+    command: ["node", "dist/migrate.js"]
     depends_on:
       db: { condition: service_healthy }
-      redis: { condition: service_healthy }
-    profiles: ["app"]
+    restart: "no"
 
-  discovery:
-    build: ./services/discovery
-    env_file: .env
+  worker:
+    <<: *app
+    command: ["node", "dist/worker.js"]
     depends_on:
-      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
-    profiles: ["app"]
 
   api:
-    build: ./services/api
-    env_file: .env
+    <<: *app
+    command: ["node", "dist/api.js"]
     ports:
       - "8080:8080"
     depends_on:
-      db: { condition: service_healthy }
-      redis: { condition: service_healthy }
-    profiles: ["app"]
+      migrate: { condition: service_completed_successfully }
+
+  # Add sources / probe from inside the network:
+  #   docker compose run --rm cli node dist/cli.js add recruitee <slug>
+  cli:
+    <<: *app
+    command: ["node", "dist/cli.js"]
+    profiles: ["tools"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
 
 volumes:
   pgdata:
