@@ -10,6 +10,10 @@ npm run cli -- probe personio <slug>
 npm run cli -- probe teamtailor <careers-host>   # e.g. acme.teamtailor.com or a custom careers domain
 npm run cli -- probe rippling <slug>
 npm run cli -- probe bamboohr <subdomain>
+npm run cli -- probe gem <board>          # e.g. superblocks; verified shape, quick sanity check
+npm run cli -- probe pinpoint <subdomain> # e.g. workwithus
+npm run cli -- probe jazzhr <subdomain>   # {subdomain}.applytojob.com
+npm run cli -- probe jobvite <company>    # jobs.jobvite.com/{company}
 ```
 For each: confirm job count looks right, title/location/description/apply URL are populated, `postedAt` parses.
 
@@ -21,6 +25,9 @@ Known unknowns:
 - [ ] BambooHR: `locationType` / `isRemote` semantics; detail response shape
 - [ ] Recruitee: `experience_code`, `salary` shape; behaviour on custom domains
 - [ ] Personio: description section names and `.com` vs `.de` hosts
+- [ ] Pinpoint: `postings.json` envelope and field names (`location`, `department`, `compensation`, dates); alternative is the verified-to-exist `https://{sub}.pinpointhq.com/jobs.rss`
+- [ ] JazzHR / Jobvite: do the listing links match `linkPattern` in `src/connectors/htmlJsonLd.ts`? Does each job page include JSON-LD? (Jobvite listing may be partly JS-rendered)
+- [ ] Dover: find the real public board endpoint (browser network tab on an `app.dover.com/jobs/{company}` page) before writing a connector
 
 ## 2. Docker end-to-end
 ```bash

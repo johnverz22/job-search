@@ -3,7 +3,7 @@
 Direct-to-company job aggregator pulling from ATS public endpoints (no LinkedIn/Indeed).
 
 ## Status
-Phase 0-1 done; Phase 2 connectors (Recruitee, Personio, Teamtailor, Rippling, BambooHR) implemented with unit tests but **not yet verified live**. See the checklist.
+Phases 0-2 done, Phase 3-4 partly done. Connectors: Recruitee, Personio, Teamtailor, Rippling, BambooHR, Gem, Pinpoint, JazzHR, Jobvite (all unit-tested). Only Gem's response shape is confirmed against real samples; the rest need live verification, see the checklist. Dover is deferred.
 
 ## Docs
 - [ATS source research](docs/planning/01-ats-sources.md)

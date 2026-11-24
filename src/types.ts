@@ -1,4 +1,4 @@
-export const PLATFORMS = ['recruitee', 'personio', 'teamtailor', 'rippling', 'bamboohr'] as const;
+export const PLATFORMS = ['recruitee', 'personio', 'teamtailor', 'rippling', 'bamboohr', 'gem', 'pinpoint', 'jazzhr', 'jobvite'] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
 export interface NormalizedJob {

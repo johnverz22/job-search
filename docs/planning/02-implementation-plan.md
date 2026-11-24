@@ -22,8 +22,14 @@ Stack: TypeScript on Node 22 (Fastify API, `pg`, `fast-xml-parser`, Vitest). One
 - [x] **Phase 0 - Scaffold**: stack, Dockerfile, compose (db, redis, migrate, worker, api, cli), SQL migrations. *Not yet exercised via `docker compose up`; CI not added*
 - [x] **Phase 1 - Connector interface**: `Connector { discover(), list(slug), detail(job) , normalize() }`, shared HTTP client (UA string, timeouts, retries, per-host rate limit, caching with ETag/If-Modified-Since)
 - [~] **Phase 2 - Top 5 keyless connectors** (code + unit tests done; *response shapes not verified live*, see 03-verification-checklist.md) (in order): Recruitee, Personio, Teamtailor, Rippling, BambooHR. Fixtures + tests per connector are in `tests/`. TODO: replace hand-written fixtures with captured live responses. TODO: Recruitee token/HTML-JSON-LD fallback before 2027-02-10
-- [ ] **Phase 3 - Next easy**: Pinpoint, Dover (resolve board UUID), Gem (verify endpoint live)
-- [ ] **Phase 4 - HTML/JSON-LD sources**: generic JSON-LD `JobPosting` extractor; then JazzHR, Jobvite, iCIMS, Taleo, Workday (POST CXS + detail GET, handle 2,000 cap by facet splitting), YC/WaaS
+- [~] **Phase 3 - Next easy**: 
+  - [x] Gem: endpoint verified (`GET https://api.gem.com/job_board/v0/{board}/job_posts/`, JSON array); fixture mirrors a real response
+  - [~] Pinpoint: connector written against `postings.json`; response shape NOT verified (defensive parser)
+  - [ ] Dover: **deferred**. A third-party source says Dover has no keyless public endpoint (only a keyed `/api/v1/external/` API) and its careers page `app.dover.com/jobs/{company}` is JS-rendered. The pasted `careers-page/{uuid}/jobs` endpoint could not be confirmed. Verify manually in a browser's network tab before building
+- [~] **Phase 4 - HTML/JSON-LD sources**:
+  - [x] Generic JSON-LD `JobPosting` extractor + link extractor (`src/jsonld.ts`), generic `htmlJsonLdConnector`
+  - [~] JazzHR, Jobvite built on it; listing link patterns unverified against live pages
+  - [ ] iCIMS, Taleo, Workday (POST CXS + detail GET, handle 2,000 cap by facet splitting), YC/WaaS
 - [ ] **Phase 5 - Slug discovery**: Common Crawl + crt.sh scripts per host pattern; career-page signature detector; validate slugs (BambooHR redirects on invalid names); populate source registry
 - [ ] **Phase 6 - Scheduling and health**: crawl cadence by company activity, failure backoff, dead-source pruning, dedupe across sources, job expiry
 - [ ] **Phase 7 - API/search**: filters (remote, location, salary, department), full-text search, pagination
