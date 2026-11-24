@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
@@ -11,7 +13,8 @@
     "dev:worker": "tsx src/worker.ts",
     "dev:api": "tsx src/api.ts",
     "migrate": "tsx src/migrate.ts",
-    "cli": "tsx src/cli.ts"
+    "cli": "tsx src/cli.ts",
+    "discover": "tsx src/discover.ts"
   },
   "dependencies": {
     "fast-xml-parser": "^4.5.0",

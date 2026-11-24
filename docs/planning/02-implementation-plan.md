@@ -30,7 +30,14 @@ Stack: TypeScript on Node 22 (Fastify API, `pg`, `fast-xml-parser`, Vitest). One
   - [x] Generic JSON-LD `JobPosting` extractor + link extractor (`src/jsonld.ts`), generic `htmlJsonLdConnector`
   - [~] JazzHR, Jobvite built on it; listing link patterns unverified against live pages
   - [ ] iCIMS, Taleo, Workday (POST CXS + detail GET, handle 2,000 cap by facet splitting), YC/WaaS
-- [ ] **Phase 5 - Slug discovery**: Common Crawl + crt.sh scripts per host pattern; career-page signature detector; validate slugs (BambooHR redirects on invalid names); populate source registry
+- [~] **Phase 5 - Slug discovery**: built and unit-tested; the crt.sh and Common Crawl fetchers are NOT yet run live
+  - [x] URL/host -> platform+slug rules for all 9 platforms with a reserved-name filter (`src/discovery/patterns.ts`)
+  - [x] Career-page detector (`discover page <url>`): finds ATS links/embeds, plus Teamtailor custom domains via `teamtailor-cdn` assets
+  - [x] crt.sh and Common Crawl CDX fetchers/parsers; candidates go in `sources` as disabled + `unvalidated`
+  - [x] `discover validate`: probes candidates with the real connector, enables valid ones, marks 404/403 invalid, retries transient errors up to 3x
+  - [x] Import from a file of URLs (`discover urls`), e.g. exported Google results
+  - [ ] Run live per platform and tune (crt.sh can time out on big domains; Common Crawl may need `--pages` tuning)
+  - [ ] Custom-domain detection for Recruitee/Personio/Rippling (needs a crawl of company career pages, seeded from a company list)
 - [ ] **Phase 6 - Scheduling and health**: crawl cadence by company activity, failure backoff, dead-source pruning, dedupe across sources, job expiry
 - [ ] **Phase 7 - API/search**: filters (remote, location, salary, department), full-text search, pagination
 
@@ -42,5 +49,5 @@ Stack: TypeScript on Node 22 (Fastify API, `pg`, `fast-xml-parser`, Vitest). One
 ## Resume checklist (for picking up later)
 1. `cp .env.example .env`
 2. `docker compose up --build -d` (db, redis, migrate, worker, api)
-3. Work through `docs/planning/03-verification-checklist.md`, then start at the first unchecked phase above
+3. Work through `docs/planning/03-verification-checklist.md` and `docs/planning/04-discovery-runbook.md`, then start at the first unchecked phase above
 4. Reference endpoint details in `docs/planning/01-ats-sources.md`
