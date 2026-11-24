@@ -25,9 +25,11 @@ export async function politeFetch(url: string, opts: FetchOpts = {}): Promise<Re
   const host = new URL(url).host;
   let attempt = 0;
   for (;;) {
-    const wait = (lastHit.get(host) ?? 0) + minIntervalMs - Date.now();
-    if (wait > 0) await sleep(wait);
-    lastHit.set(host, Date.now());
+    // Reserve the next free slot for this host synchronously so concurrent callers queue instead of firing together.
+    const now = Date.now();
+    const slot = Math.max(now, (lastHit.get(host) ?? 0) + minIntervalMs);
+    lastHit.set(host, slot);
+    if (slot > now) await sleep(slot - now);
     try {
       const res = await fetch(url, {
         method,

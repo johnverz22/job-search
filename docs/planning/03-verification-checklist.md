@@ -42,9 +42,14 @@ curl "localhost:8080/health"
 - [ ] jobs appear in `/jobs` after one worker pass
 - [ ] removing a job upstream closes it on the next pass (status = closed)
 
+## 2b. Worker/DB integration test (already passing in my sandbox)
+```bash
+DATABASE_URL=postgres://jobsearch:jobsearch@localhost:5432/jobsearch npm run test:integration
+```
+Needs `psql` and a throwaway database (it TRUNCATEs `jobs` and `sources`!). Stubs `fetch`, so it needs no network.
+
 ## 3. Open items / next
 - Add CI (typecheck + tests) and a lint step
-- Worker uses `INTERVAL` only; add per-source scheduling and bounded concurrency
 - BambooHR fetches a detail request for every job each pass; cache by id and only fetch new/changed jobs
-- Redis is provisioned but unused (reserved for queue/rate-limit/cache); in-memory per-host throttle only for now
+- Redis is provisioned but unused (the worker uses Postgres leases instead; consider removing Redis from compose unless a queue/shared rate limit is needed) (reserved for queue/rate-limit/cache); in-memory per-host throttle only for now
 - Next phases: 3 (Pinpoint, Dover, Gem), 4 (JSON-LD + HTML sources), 5 (slug discovery)

@@ -14,7 +14,8 @@
     "dev:api": "tsx src/api.ts",
     "migrate": "tsx src/migrate.ts",
     "cli": "tsx src/cli.ts",
-    "discover": "tsx src/discover.ts"
+    "discover": "tsx src/discover.ts",
+    "test:integration": "bash tests/integration/worker.sh"
   },
   "dependencies": {
     "fast-xml-parser": "^4.5.0",

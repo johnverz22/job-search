@@ -38,8 +38,18 @@ Stack: TypeScript on Node 22 (Fastify API, `pg`, `fast-xml-parser`, Vitest). One
   - [x] Import from a file of URLs (`discover urls`), e.g. exported Google results
   - [ ] Run live per platform and tune (crt.sh can time out on big domains; Common Crawl may need `--pages` tuning)
   - [ ] Custom-domain detection for Recruitee/Personio/Rippling (needs a crawl of company career pages, seeded from a company list)
-- [ ] **Phase 6 - Scheduling and health**: crawl cadence by company activity, failure backoff, dead-source pruning, dedupe across sources, job expiry
-- [ ] **Phase 7 - API/search**: filters (remote, location, salary, department), full-text search, pagination
+- [x] **Phase 6 - Scheduling and health** (SQL verified against real Postgres via `tests/integration/worker.sh`)
+  - [x] Per-source `next_run_at` with leases (`FOR UPDATE SKIP LOCKED`): crashed workers' sources return after `LEASE_MINUTES`; multiple workers can run in parallel
+  - [x] Bounded concurrency (`WORKER_CONCURRENCY`, default 4); graceful SIGTERM drain; fixed a per-host throttle race in `http.ts` that concurrency exposed
+  - [x] Adaptive intervals: x2 per 2 unchanged crawls up to `MAX_INTERVAL_HOURS`; failures back off x2 up to 7 days; +-10% jitter
+  - [x] Change detection via content hash: unchanged crawls skip the DB rewrite (just refresh `last_seen`)
+  - [x] Dead-source pruning: 3 consecutive 404/410 -> disabled `gone`; `MAX_FAILURES` consecutive failures -> `too_many_failures`
+  - [x] Within-company dedupe key (`company|title|locations`), exposed as `GET /jobs?distinct=true`
+  - [x] Maintenance (hourly): close jobs of sources not crawled successfully for `STALE_DAYS`; purge jobs closed for `RETENTION_DAYS`
+  - [x] `GET /stats`: jobs per platform, sources per state, due queue size
+  - [ ] Not done: per-host concurrency caps across multiple worker processes (the host throttle is per process, so run one worker per host group or keep concurrency modest); true cross-platform company identity (no company entity yet, so the same company on two ATSes is not merged)
+  - [ ] Not done: BambooHR/JazzHR/Jobvite still re-fetch every job detail on a changed crawl; add a per-job detail cache
+- [~] **Phase 7 - API/search**: done: filters `q` (ILIKE on title/description), `platform`, `company`, `department`, `remote=true`, `distinct`, limit/offset, `/stats`, `/health`. TODO: Postgres full-text search (tsvector + GIN) instead of ILIKE, salary and location filters, cursor pagination, API-level docs
 
 ## Rules for crawling
 - Descriptive User-Agent with contact URL; low request rates; respect robots.txt and record policy
