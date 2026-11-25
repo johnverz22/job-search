@@ -41,7 +41,8 @@ export async function validateBatch(limit: number, log = console.log) {
       const attempts = s.validation_attempts + 1;
       const invalid = permanent || attempts >= MAX_VALIDATION_ATTEMPTS;
       await pool.query(`UPDATE sources SET validation_attempts=$2, validation_status=$3, last_error=$4 WHERE id=$1`, [s.id, attempts, invalid ? 'invalid' : 'unvalidated', msg]);
-      invalid ? stats.invalid++ : stats.retry++;
+      if (invalid) stats.invalid++;
+      else stats.retry++;
       log(`${invalid ? 'invalid' : 'retry  '} ${s.platform}/${s.company_slug}: ${msg}`);
     }
   }

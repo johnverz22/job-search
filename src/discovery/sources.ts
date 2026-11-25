@@ -32,7 +32,7 @@ export function parseCdxLines(body: string): Candidate[] {
 
 export async function crtshCandidates(platform: Platform, log = console.log): Promise<Candidate[]> {
   const rule = RULES.find((r) => r.platform === platform);
-  if (!rule?.crt) throw new Error(`crt.sh not applicable to ${platform} (path-based platform); use cc`);
+  if (!rule?.crt) throw new Error(`crt.sh not applicable to ${platform} (its slug needs more than a hostname); use cc`);
   const all: Candidate[] = [];
   for (const q of rule.crt) {
     log(`crt.sh: ${q}`);

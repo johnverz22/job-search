@@ -54,4 +54,31 @@ eq "$(Q "SELECT count(*) FROM jobs WHERE status='open'")" 1 "recovered source re
 Q "UPDATE jobs SET status='closed', last_seen=now()-interval '100 days'"
 npx tsx -e "import('./src/maintenance.ts').then(async m=>{console.log('purged',await m.purgeClosedJobs(90));process.exit(0)})" 2>&1 | tail -1
 eq "$(Q "SELECT count(*) FROM jobs")" 0 "old closed jobs purged"
+# --- detail cache (BambooHR): a changed crawl must only fetch details for new jobs ---
+export STUB_LOG=$(mktemp)
+bamboo() { # $1 = number of jobs on the board
+  python3 - "$STUB_FILE" "$1" <<'PY'
+import json,sys
+n=int(sys.argv[2])
+m={"https://cachetest.bamboohr.com/careers/list":{"status":200,"body":{"result":[{"id":i,"jobOpeningName":f"Role {i}","departmentLabel":"Ops","location":{"city":"Austin","state":"TX"}} for i in range(1,n+1)]}}}
+for i in range(1,n+1):
+    m[f"https://cachetest.bamboohr.com/careers/{i}/detail"]={"status":200,"body":{"result":{"jobOpening":{"description":f"<p>desc {i}</p>","datePosted":"2026-11-01"}}}}
+json.dump(m,open(sys.argv[1],"w"))
+PY
+}
+detail_calls() { grep -c '/detail$' "$STUB_LOG" || true; }
+Q "TRUNCATE jobs, sources RESTART IDENTITY"
+Q "INSERT INTO sources (platform, company_slug, enabled, validation_status) VALUES ('bamboohr','cachetest',TRUE,'valid')"
+bamboo 2; : > "$STUB_LOG"; run
+eq "$(detail_calls)" 2 "bamboohr first crawl fetches both details"
+eq "$(Q "SELECT count(*) FROM jobs WHERE detail_fetched_at IS NOT NULL")" 2 "detail_fetched_at persisted for both jobs"
+eq "$(Q "SELECT count(*) FROM jobs WHERE description_html LIKE '<p>desc %'")" 2 "descriptions stored"
+bamboo 3; : > "$STUB_LOG"; Q "UPDATE sources SET next_run_at=now()"; run
+eq "$(detail_calls)" 1 "changed crawl (1 new job) fetches only the new job's detail"
+eq "$(Q "SELECT count(*) FROM jobs WHERE status='open' AND description_html LIKE '<p>desc %'")" 3 "cached descriptions survive the changed crawl"
+Q "UPDATE jobs SET detail_fetched_at = now() - interval '30 days' WHERE external_id='1'"
+bamboo 3; : > "$STUB_LOG"; Q "UPDATE sources SET next_run_at=now()"; run
+eq "$(detail_calls)" 1 "a detail past DETAIL_TTL_HOURS is refetched (and only that one)"
+unset STUB_LOG
+
 echo "ALL PASSED"

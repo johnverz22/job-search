@@ -9,6 +9,10 @@ const parser = new XMLParser({
   isArray: (name) => name === 'position' || name === 'jobDescription',
 });
 
+/** True if a body is a Personio job feed (used to probe custom domains). */
+export const isPersonioXml = (body: string) => /<workzag-jobs[\s>]/.test(body);
+
+/** `host` is the Personio domain ("jobs.personio.de") for subdomain slugs; for a custom-domain slug it is ignored. */
 export function normalizePersonio(slug: string, xml: string, host = 'jobs.personio.de'): NormalizedJob[] {
   const doc = parser.parse(xml);
   return arr<any>(doc?.['workzag-jobs']?.position).map((p) => {
@@ -32,7 +36,7 @@ export function normalizePersonio(slug: string, xml: string, host = 'jobs.person
       salaryCurrency: null,
       salaryText: null,
       postedAt: iso(p.createdAt),
-      applyUrl: `https://${slug}.${host}/job/${id}`,
+      applyUrl: slug.includes('.') ? `https://${slug}/job/${id}` : `https://${slug}.${host}/job/${id}`,
       raw: p,
     } satisfies NormalizedJob;
   });
@@ -41,6 +45,12 @@ export function normalizePersonio(slug: string, xml: string, host = 'jobs.person
 export const personio: Connector = {
   platform: 'personio',
   async fetchJobs(slug) {
+    if (slug.includes('.')) {
+      // Custom careers domain (e.g. careers.acme.com) that serves the same feed at /xml.
+      const xml = await getText(`https://${slug}/xml?language=en`);
+      if (!isPersonioXml(xml)) throw new Error(`personio/${slug}: not a Personio careers site`);
+      return normalizePersonio(slug, xml);
+    }
     for (const host of ['jobs.personio.de', 'jobs.personio.com']) {
       try {
         const xml = await getText(`https://${slug}.${host}/xml?language=en`);

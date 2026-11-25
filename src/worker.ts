@@ -4,7 +4,7 @@ import { snapshotHash } from './hash.js';
 import { HttpError } from './http.js';
 import { runMaintenance } from './maintenance.js';
 import { disableReason, nextDelayMs } from './schedule.js';
-import { saveSnapshot, touchSnapshot } from './store.js';
+import { loadPrevious, saveSnapshot, touchSnapshot } from './store.js';
 import type { Platform } from './types.js';
 
 const BASE_MS = Number(process.env.WORKER_INTERVAL_MS ?? 15 * 60 * 1000);
@@ -43,7 +43,9 @@ async function claim(n: number): Promise<Claimed[]> {
 async function runSource(s: Claimed) {
   const tag = `${s.platform}/${s.company_slug}`;
   try {
-    const jobs = await connectors[s.platform].fetchJobs(s.company_slug);
+    const connector = connectors[s.platform];
+    const previous = connector.cachesDetail ? await loadPrevious(s.platform, s.company_slug) : undefined;
+    const jobs = await connector.fetchJobs(s.company_slug, { previous });
     const hash = snapshotHash(jobs);
     const changed = hash !== s.snapshot_hash;
     if (changed) await saveSnapshot(s.platform, s.company_slug, jobs);

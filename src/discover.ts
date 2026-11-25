@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { pool } from './db.js';
 import { getText } from './http.js';
 import { detectAts, dedupe, discoverablePlatforms, extractSlug, type Candidate } from './discovery/patterns.js';
+import { discoverCustomDomains } from './discovery/customDomains.js';
 import { commonCrawlCandidates, crtshCandidates } from './discovery/sources.js';
 import { upsertCandidates, validateBatch } from './discovery/store.js';
 import { PLATFORMS, type Platform } from './types.js';
@@ -17,6 +18,8 @@ const usage = `usage: discover <command> [--dry]
   cc <platform> [--pages N] [--crawl CC-MAIN-YYYY-WW]   Common Crawl index (N index pages, default 5)
   urls <file|->                 extract slugs from a file of URLs (one per line), e.g. exported search results
   page <url>                    detect ATS boards linked/embedded on a company careers page
+  domains <file|->              seed list of company domains/careers URLs (one per line): scan their careers pages and probe
+                                the hosts for custom-domain Recruitee/Personio/Rippling/Teamtailor boards
   validate [--limit N]          probe unvalidated candidates; enable the valid ones (default 100)
 platforms: ${discoverablePlatforms.join(', ')}
 --dry prints candidates without touching the database`;
@@ -36,6 +39,9 @@ async function main() {
   else if (cmd === 'urls' && target) {
     const text = target === '-' ? readFileSync(0, 'utf8') : readFileSync(target, 'utf8');
     await save(text.split(/\r?\n/).map((l) => extractSlug(l.trim())).filter((c): c is Candidate => !!c), 'urls');
+  } else if (cmd === 'domains' && target) {
+    const text = target === '-' ? readFileSync(0, 'utf8') : readFileSync(target, 'utf8');
+    await save(await discoverCustomDomains(text.split(/\r?\n/)), 'domains');
   } else if (cmd === 'page' && target) await save(detectAts(await getText(target), target), `page:${target}`.slice(0, 200));
   else if (cmd === 'validate') console.log(await validateBatch(Number(opt('limit') ?? 100)));
   else { console.log(usage); process.exitCode = 1; }

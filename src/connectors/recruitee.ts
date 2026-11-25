@@ -34,9 +34,17 @@ export function normalizeRecruitee(slug: string, data: any): NormalizedJob[] {
   });
 }
 
+/** `slug` is the subdomain ("acme"), or the full careers host for a custom domain ("careers.acme.com"; contains a dot). */
+export const recruiteeHost = (slug: string) => (slug.includes('.') ? slug : `${slug}.recruitee.com`);
+
+/** True if a response body looks like a Recruitee offers payload (used to probe custom domains). */
+export const isRecruiteeOffers = (data: unknown): boolean => Array.isArray((data as any)?.offers);
+
 export const recruitee: Connector = {
   platform: 'recruitee',
   async fetchJobs(slug) {
-    return normalizeRecruitee(slug, await getJson(`https://${slug}.recruitee.com/api/offers/`));
+    const data = await getJson(`https://${recruiteeHost(slug)}/api/offers/`);
+    if (slug.includes('.') && !isRecruiteeOffers(data)) throw new Error(`recruitee/${slug}: not a Recruitee careers site`);
+    return normalizeRecruitee(slug, data);
   },
 };
