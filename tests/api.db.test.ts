@@ -14,6 +14,11 @@ const URL = process.env.TEST_DATABASE_URL;
 
 type Json = Record<string, any>;
 
+// On CI a missing TEST_DATABASE_URL must fail the build rather than silently skip the DB suite and report green.
+it.runIf(!URL && !!process.env.CI)('CI must provide TEST_DATABASE_URL (DB-backed API tests cannot be skipped on CI)', () => {
+  throw new Error('TEST_DATABASE_URL is not set but CI=true; refusing to pass without running the DB-backed tests');
+});
+
 describe.skipIf(!URL)('API against real Postgres', () => {
   let pool: pg.Pool;
   let app: FastifyInstance;
