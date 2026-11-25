@@ -1,0 +1,34 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: jobsearch
+          POSTGRES_PASSWORD: jobsearch
+          POSTGRES_DB: jobsearch_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U jobsearch"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      # Throwaway CI database; the DB-backed tests TRUNCATE it and refuse names without "test".
+      TEST_DATABASE_URL: postgres://jobsearch:jobsearch@localhost:5432/jobsearch_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Worker/DB integration scenarios
+        run: DATABASE_URL="$TEST_DATABASE_URL" npm run test:integration

@@ -49,7 +49,8 @@ DATABASE_URL=postgres://jobsearch:jobsearch@localhost:5432/jobsearch npm run tes
 Needs `psql` and a throwaway database (it TRUNCATEs `jobs` and `sources`!). Stubs `fetch`, so it needs no network.
 
 ## 3. Open items / next
-- Add CI (typecheck + tests) and a lint step
+- [x] CI (typecheck, unit + DB-backed tests, worker integration) in `.github/workflows/ci.yml`
+- Add a lint step
 - BambooHR fetches a detail request for every job each pass; cache by id and only fetch new/changed jobs
 - Redis is provisioned but unused (the worker uses Postgres leases instead; consider removing Redis from compose unless a queue/shared rate limit is needed) (reserved for queue/rate-limit/cache); in-memory per-host throttle only for now
 - Next phases: 3 (Pinpoint, Dover, Gem), 4 (JSON-LD + HTML sources), 5 (slug discovery)
