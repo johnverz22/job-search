@@ -95,6 +95,21 @@ This file lists 18 additional sources. Undocumented endpoints can change; verify
 - Discovery: `site:ycombinator.com/companies/*/jobs`, `site:workatastartup.com/jobs`
 - Difficulty: Moderate-high (respectful crawling, parse HTML/JSON-LD)
 
+## Implemented connectors and their slug formats
+The `sources.company_slug` value each connector expects (all connectors; `cli add <platform> <slug>`):
+
+| Platform | Slug | Example |
+|---|---|---|
+| recruitee, bamboohr, pinpoint, jazzhr, jobvite, rippling, gem | company identifier | `acme` |
+| personio, recruitee | subdomain, or the full careers host for a custom domain (contains a dot) | `acme-gmbh`, `careers.acme.com` |
+| teamtailor | careers host | `acme.teamtailor.com` |
+| icims | portal subdomain | `careers-acme` |
+| workday | `{tenant}.{wdN}/{site}` | `nvidia.wd5/NVIDIAExternalCareerSite` |
+| taleo (TBE) | `{sub}/{pod}/{org}/{cws}` | `phf/phf01/ACME/37` |
+| yc | YC company slug | `airbnb` |
+
+Not implemented: Dover (no confirmed keyless endpoint), classic Taleo (`*.taleo.net/careersection`).
+
 ## Cross-cutting slug discovery (beyond Google)
 - Common Crawl index queries for each host pattern (e.g. `*.recruitee.com`, `*.jobs.personio.de`, `*.bamboohr.com/careers`)
 - Certificate Transparency (crt.sh) for `%.recruitee.com`, `%.pinpointhq.com`, `%.applytojob.com`, `%.bamboohr.com`
