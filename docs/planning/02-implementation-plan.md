@@ -49,7 +49,13 @@ Stack: TypeScript on Node 22 (Fastify API, `pg`, `fast-xml-parser`, Vitest). One
   - [x] `GET /stats`: jobs per platform, sources per state, due queue size
   - [ ] Not done: per-host concurrency caps across multiple worker processes (the host throttle is per process, so run one worker per host group or keep concurrency modest); true cross-platform company identity (no company entity yet, so the same company on two ATSes is not merged)
   - [ ] Not done: BambooHR/JazzHR/Jobvite still re-fetch every job detail on a changed crawl; add a per-job detail cache
-- [~] **Phase 7 - API/search**: done: filters `q` (ILIKE on title/description), `platform`, `company`, `department`, `remote=true`, `distinct`, limit/offset, `/stats`, `/health`. TODO: Postgres full-text search (tsvector + GIN) instead of ILIKE, salary and location filters, cursor pagination, API-level docs
+- [x] **Phase 7 - API/search** (query building unit-tested in `tests/query.test.ts`; endpoints tested against real Postgres via `app.inject` in `tests/api.db.test.ts`; see `05-api.md`)
+  - [x] Postgres full-text search: generated weighted `tsvector` (title > department/company > description text, HTML stripped, description capped at 100k chars) + GIN index; `websearch_to_tsquery`, `ts_rank_cd` relevance sort
+  - [x] Filters: `platform`, `company`, `employment_type`, `seniority` (lists), `department`, `location`, `remote=true|false`, `min_salary`/`max_salary` (+ required `salary_currency`), `has_salary`, `posted_after`, `posted_within_days`, `distinct`
+  - [x] Keyset (cursor) pagination for both sorts, stable under identical and microsecond-apart timestamps; `offset` kept but deprecated
+  - [x] `GET /jobs/:id` (full description, closed jobs included), `GET /openapi.json` (rendered from the same param table the parser uses), strict 400s for bad input
+  - [ ] Not done: `distinct=true` sorts the whole open set (~300-400 ms at 200k rows; same cost shape as before); relevance search on very common terms scores every match (~100-150 ms at 25k matches); both fine for now, revisit if the corpus grows by an order of magnitude (e.g. a stored "primary posting" flag for distinct)
+  - [ ] Not done: salary amounts are not normalized to a common period (hourly/monthly/yearly) by the connectors, so `min_salary`/`max_salary` compare raw advertised numbers within one currency; no auth or rate limiting on the API
 
 ## Rules for crawling
 - Descriptive User-Agent with contact URL; low request rates; respect robots.txt and record policy

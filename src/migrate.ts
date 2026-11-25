@@ -2,10 +2,11 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pool } from './db.js';
 
-export async function migrate(dir = join(process.cwd(), 'migrations')) {
+/** Applies every migrations/*.sql in order (all are idempotent). Pass a pool to target a specific database. */
+export async function migrate(dir = join(process.cwd(), 'migrations'), db: { query(text: string): Promise<unknown> } = pool, log = true) {
   for (const f of readdirSync(dir).filter((x) => x.endsWith('.sql')).sort()) {
-    await pool.query(readFileSync(join(dir, f), 'utf8'));
-    console.log(`migrated ${f}`);
+    await db.query(readFileSync(join(dir, f), 'utf8'));
+    if (log) console.log(`migrated ${f}`);
   }
 }
 
