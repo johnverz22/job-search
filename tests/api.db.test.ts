@@ -382,11 +382,26 @@ describe.skipIf(!URL)('API against real Postgres', () => {
   });
 
   describe('docs and ops endpoints', () => {
+    it('GET /facets counts open jobs only, unnests locations, and agrees with the table', async () => {
+      const { status, body } = await get('/facets');
+      expect(status).toBe(200);
+      const open = (await pool.query(`SELECT count(*)::int AS n FROM jobs WHERE status='open'`)).rows[0].n;
+      expect(body.platform.reduce((n: number, v: { count: number }) => n + v.count, 0)).toBe(open);
+      expect(body.location.length).toBeGreaterThan(0);
+      for (const loc of body.location.slice(0, 5)) {
+        const { rows } = await pool.query(`SELECT count(*)::int AS n FROM jobs WHERE status='open' AND $1 = ANY(locations)`, [loc.value]);
+        expect(loc.count, loc.value).toBe(rows[0].n);
+      }
+      expect(body.salary_currency.every((c: { value: string }) => c.value === c.value.toUpperCase())).toBe(true);
+      const counts = body.platform.map((v: { count: number }) => v.count);
+      expect(counts).toEqual([...counts].sort((a: number, b: number) => b - a));
+    });
+
     it('serves the OpenAPI document', async () => {
       const { status, body } = await get('/openapi.json');
       expect(status).toBe(200);
       expect(body.openapi).toMatch(/^3\./);
-      expect(Object.keys(body.paths)).toEqual(expect.arrayContaining(['/jobs', '/jobs/{id}', '/stats', '/health']));
+      expect(Object.keys(body.paths)).toEqual(expect.arrayContaining(['/jobs', '/jobs/{id}', '/stats', '/health', '/facets']));
     });
 
     it('health and stats still work', async () => {

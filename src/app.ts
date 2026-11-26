@@ -1,15 +1,21 @@
-import Fastify, { type FastifyServerOptions } from 'fastify';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import fastifyStatic from '@fastify/static';
 import type { QueryResult, QueryResultRow } from 'pg';
 import { DETAIL_SQL, QueryError, buildJobsQuery, isJobId, parseJobsQuery, toPage } from './query.js';
 import { openapiSpec } from './openapi.js';
+import { cachedFacets } from './facets.js';
 
 /** The slice of pg.Pool the API needs; lets tests inject their own pool. */
 export interface Db {
   query<R extends QueryResultRow = any>(text: string, values?: unknown[]): Promise<QueryResult<R>>;
 }
 
-export function buildApp(db: Db, opts: FastifyServerOptions = {}) {
-  const app = Fastify(opts);
+/** The JSON API as an encapsulated plugin, so it can be mounted bare (tests) or under /api (the server). */
+function apiRoutes(db: Db) {
+  return async (app: FastifyInstance) => {
+  const facets = cachedFacets(db);
 
   app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
     if (err instanceof QueryError) return reply.code(400).send({ error: 'invalid_query', message: err.message });
@@ -24,6 +30,11 @@ export function buildApp(db: Db, opts: FastifyServerOptions = {}) {
   });
 
   app.get('/openapi.json', async () => openapiSpec);
+
+  app.get('/facets', async (_req, reply) => {
+    reply.header('Cache-Control', 'public, max-age=300');
+    return facets();
+  });
 
   app.get('/jobs', async (req) => {
     const query = parseJobsQuery(req.query as Record<string, unknown>);
@@ -49,6 +60,62 @@ export function buildApp(db: Db, opts: FastifyServerOptions = {}) {
     ]);
     return { jobs: jobs.rows, sources: sources.rows, queue: due.rows[0] };
   });
+  };
+}
 
+/** API only, unprefixed. Used by tests. */
+export function buildApp(db: Db, opts: FastifyServerOptions = {}) {
+  const app = Fastify(opts);
+  app.register(apiRoutes(db));
+  return app;
+}
+
+export const CSP = [
+  "default-src 'self'", "script-src 'self'", "style-src 'self'", "style-src-attr 'unsafe-inline'", "img-src 'self' data:",
+  "font-src 'self'", "connect-src 'self'", "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
+].join('; ');
+
+export const SECURITY_HEADERS: Record<string, string> = {
+  'Content-Security-Policy': CSP,
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'X-Frame-Options': 'DENY',
+};
+
+export interface ServerOptions {
+  /** Directory with the built web app (index.html + assets). Omit or point at a missing dir to serve the API only. */
+  webRoot?: string;
+  fastify?: FastifyServerOptions;
+}
+
+/**
+ * Production server: the JSON API under /api, the built SPA at / (same origin, so no CORS), an index.html fallback for
+ * client-side routes, security headers on everything. /health also stays at the root for container health checks.
+ */
+export function buildServer(db: Db, opts: ServerOptions = {}) {
+  const app = Fastify(opts.fastify ?? {});
+  app.addHook('onSend', async (_req, reply) => {
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) reply.header(k, v);
+  });
+  app.register(apiRoutes(db), { prefix: '/api' });
+  app.get('/health', async () => {
+    await db.query('SELECT 1');
+    return { ok: true };
+  });
+
+  const root = opts.webRoot;
+  if (root && existsSync(join(root, 'index.html'))) {
+    app.register(fastifyStatic, {
+      root, wildcard: false, index: ['index.html'],
+      // Vite fingerprints everything under /assets, so it can be cached forever; index.html must always revalidate.
+      setHeaders: (reply, path) => void reply.header('Cache-Control', path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache'),
+    });
+    // Unknown GETs that look like pages get the SPA shell; unknown API paths and asset-like paths stay real 404s.
+    app.setNotFoundHandler((req, reply) => {
+      const path = req.url.split('?')[0];
+      if (req.method === 'GET' && !path.startsWith('/api/') && !/\.[a-z0-9]+$/i.test(path)) return reply.sendFile('index.html');
+      return reply.code(404).send({ error: 'not_found' });
+    });
+  }
   return app;
 }

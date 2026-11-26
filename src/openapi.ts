@@ -25,7 +25,7 @@ const errorSchema = {
 /** Rendered from JOB_PARAMS so the documented parameters can't drift from what the parser accepts. */
 export const openapiSpec = {
   openapi: '3.0.3',
-  info: { title: 'job-search API', version: '0.1.0', description: 'Read-only API over jobs aggregated from ATS public endpoints.' },
+  info: { title: 'job-search API', version: '0.1.0', description: 'Read-only API over jobs aggregated from ATS public endpoints. The server mounts these paths under /api.' },
   paths: {
     '/jobs': {
       get: {
@@ -63,6 +63,13 @@ export const openapiSpec = {
           '400': { description: 'Malformed id', content: { 'application/json': { schema: errorSchema } } },
           '404': { description: 'No such job', content: { 'application/json': { schema: errorSchema } } },
         },
+      },
+    },
+    '/facets': {
+      get: {
+        summary: 'Top filter values with open-job counts (platform, employment_type, seniority, department, location, salary_currency)',
+        description: 'Up to 50 values per facet, most common first. Cached for 5 minutes. Values are the platforms\' own labels and are not normalized.',
+        responses: { '200': { description: 'Facet values' } },
       },
     },
     '/stats': { get: { summary: 'Job counts per platform, source states and crawl queue depth', responses: { '200': { description: 'Stats' } } } },

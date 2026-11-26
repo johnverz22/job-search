@@ -19,6 +19,7 @@
     "test:integration": "bash tests/integration/worker.sh"
   },
   "dependencies": {
+    "@fastify/static": "^10.1.12",
     "fast-xml-parser": "^4.5.0",
     "fastify": "^5.0.0",
     "pg": "^8.13.0"
