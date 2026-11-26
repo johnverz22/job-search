@@ -70,8 +70,10 @@ export function buildApp(db: Db, opts: FastifyServerOptions = {}) {
   return app;
 }
 
+// Scripts are locked to our own files. Inline *styles* are allowed because Radix's scroll lock (react-remove-scroll) injects a
+// <style> element at runtime; blocking it would let the page scroll behind an open dialog. Style injection cannot run code.
 export const CSP = [
-  "default-src 'self'", "script-src 'self'", "style-src 'self'", "style-src-attr 'unsafe-inline'", "img-src 'self' data:",
+  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data:",
   "font-src 'self'", "connect-src 'self'", "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
 ].join('; ');
 

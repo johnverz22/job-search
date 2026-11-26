@@ -65,7 +65,8 @@ describe('buildServer', () => {
     }
     expect(CSP).toContain("frame-ancestors 'none'");
     expect(CSP).not.toContain('unsafe-eval');
-    expect(CSP).not.toMatch(/script-src[^;]*unsafe-inline/);
+    expect(CSP).not.toMatch(/script-src[^;]*unsafe-inline/); // code execution stays locked down
+    expect(CSP).toContain("style-src 'self' 'unsafe-inline'"); // needed by the dialog scroll lock
   });
 
   it('works API-only when the web root is missing', async () => {

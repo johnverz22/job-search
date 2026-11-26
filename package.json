@@ -16,7 +16,10 @@
     "migrate": "tsx src/migrate.ts",
     "cli": "tsx src/cli.ts",
     "discover": "tsx src/discover.ts",
-    "test:integration": "bash tests/integration/worker.sh"
+    "test:integration": "bash tests/integration/worker.sh",
+    "web:install": "npm ci --prefix web",
+    "web:build": "npm run build --prefix web",
+    "web:test": "npm test --prefix web"
   },
   "dependencies": {
     "@fastify/static": "^10.1.12",
