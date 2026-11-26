@@ -26,10 +26,18 @@ describe('gem', () => {
   });
 });
 
-describe('pinpoint (shape unverified)', () => {
+describe('pinpoint (shape verified live)', () => {
   it('handles flat and JSON:API-ish envelopes', () => {
     const flat = normalizePinpoint('acme', { data: [{ id: 9, title: 'Eng', url: 'https://acme.pinpointhq.com/en/postings/abc', location: { name: 'Remote' }, department: { name: 'Eng' }, workplace_type_text: 'Remote', compensation: '60000-70000 GBP' }] });
     expect(flat[0]).toMatchObject({ externalId: '9', department: 'Eng', remote: true, salaryText: '60000-70000 GBP', locations: ['Remote'] });
+    // Real postings.json shape: {"data":[{id, title, ..., compensation_minimum/maximum/currency, compensation_visible}]}
+    const real = normalizePinpoint('acme', { data: [{ id: '7', title: 'Ops', job: { department: { name: 'Ops' } }, location: { name: 'London' },
+      workplace_type_text: 'Remote', employment_type_text: 'Permanent - Full Time', compensation_visible: true,
+      compensation_minimum: 50000, compensation_maximum: 70000, compensation_currency: 'GBP', url: 'https://acme.pinpointhq.com/en/postings/x' }] });
+    expect(real[0]).toMatchObject({ externalId: '7', department: 'Ops', remote: true, employmentType: 'Permanent - Full Time',
+      salaryMin: 50000, salaryMax: 70000, salaryCurrency: 'GBP', salaryText: '50000-70000 GBP' });
+    const hidden = normalizePinpoint('acme', { data: [{ id: '8', title: 'x', compensation_visible: false, compensation_minimum: 1, compensation_maximum: 2 }] });
+    expect(hidden[0]).toMatchObject({ salaryMin: null, salaryMax: null, salaryCurrency: null, salaryText: null });
     const wrapped = normalizePinpoint('acme', { data: [{ id: '5', attributes: { title: 'Ops' } }] });
     expect(wrapped[0]).toMatchObject({ externalId: '5', title: 'Ops', applyUrl: 'https://acme.pinpointhq.com/en/postings/5' });
     expect(normalizePinpoint('a', {})).toEqual([]);

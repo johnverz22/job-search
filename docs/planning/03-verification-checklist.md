@@ -27,9 +27,9 @@ Known unknowns:
 - [ ] Rippling: envelope shape (`items`/`jobs`/array), pagination fields, location and workplace-type fields
 - [ ] Teamtailor: `remoteStatus` values; whether `tt:` namespace prefixes match real feeds
 - [ ] BambooHR: `locationType` / `isRemote` semantics; detail response shape
-- [ ] Recruitee: `experience_code`, `salary` shape; behaviour on custom domains
-- [ ] Personio: description section names and `.com` vs `.de` hosts
-- [ ] Pinpoint: `postings.json` envelope and field names (`location`, `department`, `compensation`, dates); alternative is the verified-to-exist `https://{sub}.pinpointhq.com/jobs.rss`
+- [x] Personio: VERIFIED live 2026-11-26 (`aiya-europe.jobs.personio.de`): titles, offices, departments, employment types, dates and apply URLs all populate; `jobDescription` sections render to HTML. Caveat: some postings return `descriptionHtml: null` — either they genuinely have no description sections or use section names the normalizer doesn't cover; spot-check if descriptions look sparse
+- [~] Recruitee: probed live OK 2026-11-26 (`11bitstudios`, 9 jobs; titles/locations/remote/employmentType/postedAt/applyUrl all populated), but `salary` shape and `experience_code` still unconfirmed — sampled jobs had no salary data
+- [x] Pinpoint: VERIFIED live 2026-11-26. `postings.json` returns `{"data":[...]}` with flat fields; `location`, `job.department`, `workplace_type_text`, `employment_type_text`, `compensation_{visible,currency,minimum,maximum}` all map correctly (salary fields added to the normalizer). There is NO posted-date field (`deadline_at` is an application deadline), so `postedAt` stays null. `compensation` free-text is absent on real boards; min/max/currency carry the data
 - [ ] JazzHR / Jobvite: do the listing links match `linkPattern` in `src/connectors/htmlJsonLd.ts`? Does each job page include JSON-LD? (Jobvite listing may be partly JS-rendered)
 - [ ] iCIMS: does `/jobs/search?ss=1&pr=N&in_iframe=1` paginate with `pr` (0-based)? Do job links match `/jobs/{id}/...`, and do job pages (with `?in_iframe=1`) carry JSON-LD? Many portals are not `careers-*`
 - [ ] Taleo (TBE): the paging parameter (code guesses `pageNum`; if wrong, only page 1 is ingested); `viewRequisition?...rid=` link shape; JSON-LD on job pages. Classic `careersection` boards are out of scope

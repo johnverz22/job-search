@@ -24,7 +24,7 @@ Stack: TypeScript on Node 22 (Fastify API, `pg`, `fast-xml-parser`, Vitest). One
 - [~] **Phase 2 - Top 5 keyless connectors** (code + unit tests done; *response shapes not verified live*, see 03-verification-checklist.md) (in order): Recruitee, Personio, Teamtailor, Rippling, BambooHR. Fixtures + tests per connector are in `tests/`. TODO: replace hand-written fixtures with captured live responses. TODO: Recruitee token/HTML-JSON-LD fallback before 2027-02-10
 - [~] **Phase 3 - Next easy**: 
   - [x] Gem: endpoint verified (`GET https://api.gem.com/job_board/v0/{board}/job_posts/`, JSON array); fixture mirrors a real response
-  - [~] Pinpoint: connector written against `postings.json`; response shape NOT verified (defensive parser)
+  - [x] Pinpoint: VERIFIED live — `postings.json` is `{"data":[...]}` with flat fields; compensation min/max/currency now normalized (no posted-date field exists)
   - [ ] Dover: **deferred**. A third-party source says Dover has no keyless public endpoint (only a keyed `/api/v1/external/` API) and its careers page `app.dover.com/jobs/{company}` is JS-rendered. The pasted `careers-page/{uuid}/jobs` endpoint could not be confirmed. Verify manually in a browser's network tab before building
 - [~] **Phase 4 - HTML/JSON-LD sources**:
   - [x] Generic JSON-LD `JobPosting` extractor + link extractor (`src/jsonld.ts`), generic `htmlJsonLdConnector`
@@ -34,7 +34,7 @@ Stack: TypeScript on Node 22 (Fastify API, `pg`, `fast-xml-parser`, Vitest). One
     - Taleo: Business Edition (`{sub}.tbe.taleo.net`) HTML results + JSON-LD; slug = `{sub}/{pod}/{org}/{cws}`. The paging parameter is a guess (fails safe to page 1 only); classic `*.taleo.net/careersection` is not supported
     - Workday: CXS `POST .../wday/cxs/{tenant}/{site}/jobs` (20 per page) + detail GET; results over the 2,000 cap are split by facet (location, job family, ...) and merged by requisition id; slug = `{tenant}.{wdN}/{site}`
     - YC: `ycombinator.com/companies/{slug}/jobs` over the generic JSON-LD connector (Work at a Startup company pages map to the same slug); robots.txt/terms not yet checked
-- [~] **Phase 5 - Slug discovery**: built and unit-tested; the crt.sh and Common Crawl fetchers are NOT yet run live
+- [~] **Phase 5 - Slug discovery**: built and unit-tested; Common Crawl ran live for pinpoint, recruitee and personio (`discover cc <platform> --pages 1 --dry` returned real slugs; `cli probe` on discovered slugs works — bamboohr's `*.bamboohr.com` CC query returned 0 on page 0, may need `--pages` tuning). crt.sh not yet run live
   - [x] URL/host -> platform+slug rules for all 9 platforms with a reserved-name filter (`src/discovery/patterns.ts`)
   - [x] Career-page detector (`discover page <url>`): finds ATS links/embeds, plus Teamtailor custom domains via `teamtailor-cdn` assets
   - [x] crt.sh and Common Crawl CDX fetchers/parsers; candidates go in `sources` as disabled + `unvalidated`

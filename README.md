@@ -3,7 +3,7 @@
 Direct-to-company job aggregator pulling from ATS public endpoints (no LinkedIn/Indeed).
 
 ## Status
-Phases 0, 1, 6 and 7 done; 2-5 are code-complete but unverified live. The scheduler (adaptive intervals, leases, concurrency, per-job detail cache, maintenance) is verified against real Postgres. Slug discovery (incl. custom-domain detection) is built but not run live (see the runbook). Connectors: Recruitee, Personio, Teamtailor, Rippling, BambooHR, Gem, Pinpoint, JazzHR, Jobvite, iCIMS, Taleo (Business Edition), Workday, Y Combinator (all unit-tested). Only Gem's response shape is confirmed against real samples; the rest need live verification, see the checklist. Dover is deferred.
+Phases 0, 1, 6 and 7 done; 2-5 are code-complete but unverified live. The scheduler (adaptive intervals, leases, concurrency, per-job detail cache, maintenance) is verified against real Postgres. Slug discovery (incl. custom-domain detection) is built; Common Crawl ran live for pinpoint and recruitee (see the runbook). Connectors: Recruitee, Personio, Teamtailor, Rippling, BambooHR, Gem, Pinpoint, JazzHR, Jobvite, iCIMS, Taleo (Business Edition), Workday, Y Combinator (all unit-tested). Gem, Pinpoint and Personio response shapes are confirmed against live endpoints (Recruitee probed OK); the rest need live verification, see the checklist. Dover is deferred.
 
 ## Docs
 - [ATS source research](docs/planning/01-ats-sources.md)
