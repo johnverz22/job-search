@@ -1,0 +1,10 @@
+/** Only http(s) URLs may become an href; everything else (javascript:, data:, relative junk) is rejected. */
+export function safeHttpUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
