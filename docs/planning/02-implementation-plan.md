@@ -62,6 +62,12 @@ Stack: TypeScript on Node 22 (Fastify API, `pg`, `fast-xml-parser`, Vitest). One
   - [ ] Not done: `distinct=true` sorts the whole open set (~300-400 ms at 200k rows; same cost shape as before); relevance search on very common terms scores every match (~100-150 ms at 25k matches); both fine for now, revisit if the corpus grows by an order of magnitude (e.g. a stored "primary posting" flag for distinct)
   - [ ] Not done: salary amounts are not normalized to a common period (hourly/monthly/yearly) by the connectors, so `min_salary`/`max_salary` compare raw advertised numbers within one currency; no auth or rate limiting on the API
 
+- [ ] **Phase 8 - Web UI** (planned; full spec in `docs/planning/06-ui-plan.md`)
+  - [ ] U0 decisions: public vs internal, `/api` prefix, facets/count scope
+  - [ ] U1 backend prerequisites: serve the SPA same-origin, `GET /facets`, security headers, optional capped total count
+  - [ ] U2 scaffold (`web/`: Vite + React + TS + Tailwind v4), U3 search and results, U4 job detail (sanitized HTML), U5 status page, U6 polish (a11y, dark mode, bundle budget), U7 Docker/compose/docs
+  - Responsive spec covers base, sm, md, lg and xl; e2e at 375/768/1280 px
+
 ## Rules for crawling
 - Descriptive User-Agent with contact URL; low request rates; respect robots.txt and record policy
 - Treat undocumented endpoints as unstable: isolate per connector, alert on schema drift

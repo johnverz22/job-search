@@ -33,3 +33,5 @@ npm run discover -- urls urls.txt --dry # slug discovery; see runbook
 Layout: `src/connectors/*` (one file per ATS), `src/worker.ts` (scheduler), `src/api.ts`, `src/store.ts`, `migrations/`.
 
 Detail-cache and per-connector knobs (see `.env.example`): `DETAIL_TTL_HOURS`, `MAX_DETAIL_FETCH`, `WORKDAY_DETAIL_BUDGET`, `ICIMS_MAX_PAGES`, `TALEO_MAX_PAGES`.
+
+A web UI is planned but not started: see `docs/planning/06-ui-plan.md`.
