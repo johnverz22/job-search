@@ -51,3 +51,6 @@ Then probe a handful of the slugs with `npm run cli -- probe <platform> <slug>` 
 - Reserved subdomains (`www`, `api`, `app`, ...) are filtered in `src/discovery/patterns.ts`. Add to `RESERVED` when you see junk slugs.
 - BambooHR: invalid subdomains can redirect instead of 404; the connector requires a JSON `result` array, so these fail validation.
 - Respect each site's terms and robots.txt; keep request rates low and keep the descriptive `CRAWLER_USER_AGENT` set.
+
+## Serving the UI
+The API process serves the built UI from `web/dist` (override with `WEB_ROOT`). If that directory is missing it serves the API only. Everything JSON is under `/api` (e.g. `/api/jobs`, `/api/stats`, `/api/openapi.json`); `/health` stays at the root for health checks. External consumers of the old unprefixed paths must switch to `/api/...`.

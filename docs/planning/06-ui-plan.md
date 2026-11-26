@@ -1,6 +1,25 @@
 # Web UI plan
 
-Status: **planned, not started.** Written against the API as of commit `a404d77`. This page is meant to be executed later without re-deriving anything; the last section is a single copy-paste prompt that captures it.
+Status: **implemented (U0-U7); two verification gaps remain, listed under "Implementation status".** Written against the API as of commit `a404d77`. The last section is the single prompt that captured the plan.
+
+## Implementation status
+
+**U0 decisions (approved):** internal audience (no auth, rate limiting or takedown page yet; section 8 still applies if that changes); API moved under `/api` (the bare `/jobs/:id` now belongs to the SPA); `/facets` included; capped total count **not** built (the UI says "N jobs loaded, more available").
+
+| Phase | State |
+|---|---|
+| U1 backend | Done: `buildServer` (SPA same-origin, `/api` prefix, `/health` at root, SPA fallback that keeps real 404s for `/api/*` and asset paths), `GET /facets` (5 min cache, real-Postgres test), CSP and security headers |
+| U2 scaffold | Done: `web/` (Vite 8, React 18, TS strict, Tailwind v4, Router 6, TanStack Query 5, Radix Dialog, DOMPurify) |
+| U3 search | Done: every `JOB_PARAMS` filter, URL as only state, chips, load more, all states, mobile sheet / md quick filters / lg sidebar |
+| U4 job detail | Done: sanitized description, closed banner, missing-description state, Apply placement per breakpoint, back keeps state |
+| U5 status | Done |
+| U6 polish | Done: light/dark tokens with a contrast test for both themes, reduced motion, `/` shortcut, skip link, bundle budget (101.6 kB gz initial vs 150, DOMPurify kept out of the search bundle, enforced in `npm run build`) |
+| U7 ship | Done in files: multi-stage `Dockerfile`, CI jobs `web` and `e2e`. **Docker image not built here (no Docker in the sandbox)** |
+| U8 | Not started (xl master-detail, saved jobs, real company names, total count) |
+
+**Not verified, and why:** (1) the **Playwright suite (`web/e2e`) has never been run** because the sandbox could not download a browser. Its server half was exercised for real over HTTP (seeded data, SPA fallback, headers, caching); the browser assertions (layout per breakpoint, touch targets, axe, dialog scroll lock, CSP violations) first run in CI. Expect to fix some selectors on that first run. (2) No visual review of the UI by eye at any width.
+
+**Deviations from the plan:** typed API client is hand-written (`web/src/api/types.ts`), not generated from OpenAPI; the Company filter is a text box of exact company ids (no company facet exists), plus a "company" link on the job page; native `<select>`/checkbox/radio instead of Radix Select/Checkbox (better on mobile, less code); Apply is on result cards from `sm` up only (on phones the card opens the job, whose sticky bar carries Apply); CSP allows inline styles (not scripts) because Radix's scroll lock injects a `<style>` element.
 
 ## 1. Goal and scope
 
@@ -84,7 +103,7 @@ The UI is buildable against today's API, but these gaps need small backend chang
 1. **Serve the SPA** from Fastify: `@fastify/static` for `web/dist`, SPA fallback for non-API GETs (must not shadow `/jobs`, `/stats`, `/health`, `/openapi.json`; consider moving the API under `/api/*` before shipping so the SPA can own `/jobs/:id` without clashing with the JSON route. **Decide this up front**: the detail route `/jobs/:id` currently returns JSON).
 2. **`GET /facets`**: top values with counts over *open* jobs for `platform`, `employment_type`, `seniority`, `department`, `location` (top ~50), and `salary_currency`. Cached in memory for 5 minutes. Needed because the filter option lists cannot be derived from a page of results.
 3. **Total count (optional)**: `count=true` on `/jobs` returning a capped count (`10000+` above the cap) so the UI can say "1,284 jobs". Skipped in v1 if it measurably slows the 12%-match relevance query (see the performance table in 05-api.md).
-4. **Security headers**: CSP (`default-src 'self'`; no inline scripts), `X-Content-Type-Options`, `Referrer-Policy`, `frame-ancestors 'none'`.
+4. **Security headers**: CSP (`default-src 'self'`; no inline or eval scripts; inline *styles* allowed because Radix's scroll lock injects a `<style>` element), `X-Content-Type-Options`, `Referrer-Policy`, `frame-ancestors 'none'`.
 5. **Company display names**: only `company_slug` exists. v1 prettifies slugs client-side (`acme-inc` -> `Acme Inc`; Workday `tenant.wd5/site` -> tenant, Taleo -> org). A real `companies` table (name, domain, logo) is a later improvement. Do not block on it.
 6. **OpenAPI** updated for new endpoints; the existing test that keeps `JOB_PARAMS` and the spec in sync must keep passing.
 

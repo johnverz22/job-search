@@ -7,7 +7,10 @@ Read-only JSON API (`src/app.ts`, started by `src/api.ts`). The machine-readable
 |---|---|
 | `GET /jobs` | Search and list **open** jobs (cursor-paginated) |
 | `GET /jobs/:id` | One job with `description_html`; closed jobs are returned too (check `status`) |
+| `GET /facets` | Top filter values with open-job counts (platform, employment_type, seniority, department, location, salary_currency); cached 5 minutes |
 | `GET /stats`, `GET /health` | Operational |
+
+**Paths are served under `/api`** by the real server (`/api/jobs`, `/api/jobs/:id`, `/api/facets`, `/api/stats`, `/api/openapi.json`); this table and the rest of the page use the short form. `/health` is also available at the root. The unprefixed paths now belong to the web UI (`/jobs/:id` is a page, not JSON). The test suite mounts the API without the prefix (`buildApp`), the server with it (`buildServer`).
 | `GET /openapi.json` | OpenAPI 3 spec |
 
 Errors are JSON: `400 {"error":"invalid_query","message":"..."}` (unknown or invalid parameters are rejected, not ignored), `404 {"error":"not_found"}`.

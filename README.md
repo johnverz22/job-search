@@ -34,4 +34,15 @@ Layout: `src/connectors/*` (one file per ATS), `src/worker.ts` (scheduler), `src
 
 Detail-cache and per-connector knobs (see `.env.example`): `DETAIL_TTL_HOURS`, `MAX_DETAIL_FETCH`, `WORKDAY_DETAIL_BUDGET`, `ICIMS_MAX_PAGES`, `TALEO_MAX_PAGES`.
 
-A web UI is planned but not started: see `docs/planning/06-ui-plan.md`.
+## Web UI
+
+React app in `web/`, served by the API container on the same port (UI at `/`, JSON API under `/api`). Spec and status: `docs/planning/06-ui-plan.md`.
+
+```bash
+npm run web:install                      # once
+npm run dev:api &                        # API on :8080
+npm run dev --prefix web                 # Vite dev server, proxies /api to :8080
+npm run web:build && npm run build && node dist/api.js   # production shape: one server on :8080
+npm run web:test                         # unit + component tests (jsdom)
+```
+E2E (needs a Postgres test database and Chromium): `npm run build && npm run web:build`, then `cd web && npx playwright install chromium && TEST_DATABASE_URL=postgres://.../jobsearch_test npx playwright test`.
