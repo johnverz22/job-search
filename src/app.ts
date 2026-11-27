@@ -2,71 +2,78 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import fastifyStatic from '@fastify/static';
-import type { QueryResult, QueryResultRow } from 'pg';
-import { DETAIL_SQL, QueryError, buildJobsQuery, isJobId, parseJobsQuery, toPage } from './query.js';
-import { openapiSpec } from './openapi.js';
 import { cachedFacets } from './facets.js';
+import { isJobId, type Aggregator, type SourceState } from './model.js';
+import { openapiSpec } from './openapi.js';
+import { QueryError, parseJobsQuery } from './query.js';
+import { searchJobs, toDetailRow, toPage } from './search.js';
 
-/** The slice of pg.Pool the API needs; lets tests inject their own pool. */
-export interface Db {
-  query<R extends QueryResultRow = any>(text: string, values?: unknown[]): Promise<QueryResult<R>>;
+/** GET /api/stats. `closed` is always 0: a job is either listed or gone. */
+export function computeStats(agg: Aggregator, now = Date.now()) {
+  const jobs = new Map<string, number>();
+  for (const r of agg.all()) jobs.set(r.platform, (jobs.get(r.platform) ?? 0) + 1);
+  const states = agg.states();
+  const sources = new Map<string, { platform: string; state: SourceState['status']; n: number }>();
+  for (const s of states) {
+    const key = `${s.platform}/${s.status}`;
+    const row = sources.get(key) ?? { platform: s.platform, state: s.status, n: 0 };
+    row.n++;
+    sources.set(key, row);
+  }
+  const due = states.map((s) => Date.parse(s.nextDueAt)).filter((t) => t <= now);
+  const byName = <T>(f: (x: T) => string) => (a: T, b: T) => f(a).localeCompare(f(b));
+  return {
+    jobs: [...jobs].map(([platform, open]) => ({ platform, open, closed: 0 })).sort(byName((x) => x.platform)),
+    sources: [...sources.values()].sort(byName((x) => `${x.platform}/${x.state}`)),
+    queue: { due: due.length, oldest_due: due.length ? new Date(Math.min(...due)).toISOString() : null },
+    crawl: agg.progress(),
+    memory_mb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+  };
 }
 
 /** The JSON API as an encapsulated plugin, so it can be mounted bare (tests) or under /api (the server). */
-function apiRoutes(db: Db) {
+function apiRoutes(agg: Aggregator) {
   return async (app: FastifyInstance) => {
-  const facets = cachedFacets(db);
+    const facets = cachedFacets(agg);
 
-  app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
-    if (err instanceof QueryError) return reply.code(400).send({ error: 'invalid_query', message: err.message });
-    if (err.statusCode && err.statusCode < 500) return reply.code(err.statusCode).send({ error: 'bad_request', message: err.message });
-    app.log.error(err);
-    return reply.code(500).send({ error: 'internal_error' });
-  });
+    app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
+      if (err instanceof QueryError) return reply.code(400).send({ error: 'invalid_query', message: err.message });
+      if (err.statusCode && err.statusCode < 500) return reply.code(err.statusCode).send({ error: 'bad_request', message: err.message });
+      app.log.error(err);
+      return reply.code(500).send({ error: 'internal_error' });
+    });
 
-  app.get('/health', async () => {
-    await db.query('SELECT 1');
-    return { ok: true };
-  });
+    app.get('/health', async () => ({ ok: true }));
 
-  app.get('/openapi.json', async () => openapiSpec);
+    app.get('/openapi.json', async () => openapiSpec);
 
-  app.get('/facets', async (_req, reply) => {
-    reply.header('Cache-Control', 'public, max-age=300');
-    return facets();
-  });
+    app.get('/facets', async (_req, reply) => {
+      // While the first crawl is running the values change quickly, so do not let browsers hold on to them.
+      reply.header('Cache-Control', agg.progress().ready ? 'public, max-age=300' : 'no-store');
+      return facets();
+    });
 
-  app.get('/jobs', async (req) => {
-    const query = parseJobsQuery(req.query as Record<string, unknown>);
-    const built = buildJobsQuery(query);
-    const { rows } = await db.query(built.text, built.values);
-    return toPage(query, rows);
-  });
+    app.get('/jobs', async (req) => {
+      const query = parseJobsQuery(req.query as Record<string, unknown>);
+      return toPage(query, searchJobs(agg.all(), query));
+    });
 
-  app.get('/jobs/:id', async (req, reply) => {
-    const { id } = req.params as { id: string };
-    if (!isJobId(id)) return reply.code(400).send({ error: 'invalid_id', message: 'id must be a positive integer' });
-    const { rows } = await db.query(DETAIL_SQL, [id]);
-    if (!rows[0]) return reply.code(404).send({ error: 'not_found', message: `no job with id ${id}` });
-    return rows[0];
-  });
+    app.get('/jobs/:id', async (req, reply) => {
+      const { id } = req.params as { id: string };
+      if (!isJobId(id)) return reply.code(400).send({ error: 'invalid_id', message: 'id must be 12 hexadecimal characters' });
+      const record = agg.get(id);
+      if (!record) return reply.code(404).send({ error: 'not_found', message: `no job with id ${id}` });
+      return toDetailRow(record);
+    });
 
-  app.get('/stats', async () => {
-    const [jobs, sources, due] = await Promise.all([
-      db.query(`SELECT platform, count(*) FILTER (WHERE status='open')::int AS open, count(*) FILTER (WHERE status='closed')::int AS closed FROM jobs GROUP BY 1 ORDER BY 1`),
-      db.query(`SELECT platform, CASE WHEN enabled THEN 'active' ELSE coalesce(disabled_reason, validation_status) END AS state, count(*)::int AS n
-                FROM sources GROUP BY 1,2 ORDER BY 1,2`),
-      db.query(`SELECT count(*)::int AS due, min(next_run_at) AS oldest_due FROM sources WHERE enabled AND next_run_at <= now()`),
-    ]);
-    return { jobs: jobs.rows, sources: sources.rows, queue: due.rows[0] };
-  });
+    app.get('/stats', async () => computeStats(agg));
   };
 }
 
 /** API only, unprefixed. Used by tests. */
-export function buildApp(db: Db, opts: FastifyServerOptions = {}) {
+export function buildApp(agg: Aggregator, opts: FastifyServerOptions = {}) {
   const app = Fastify(opts);
-  app.register(apiRoutes(db));
+  app.register(apiRoutes(agg));
   return app;
 }
 
@@ -94,16 +101,14 @@ export interface ServerOptions {
  * Production server: the JSON API under /api, the built SPA at / (same origin, so no CORS), an index.html fallback for
  * client-side routes, security headers on everything. /health also stays at the root for container health checks.
  */
-export function buildServer(db: Db, opts: ServerOptions = {}) {
+export function buildServer(agg: Aggregator, opts: ServerOptions = {}) {
   const app = Fastify(opts.fastify ?? {});
   app.addHook('onSend', async (_req, reply) => {
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) reply.header(k, v);
   });
-  app.register(apiRoutes(db), { prefix: '/api' });
-  app.get('/health', async () => {
-    await db.query('SELECT 1');
-    return { ok: true };
-  });
+  app.register(apiRoutes(agg), { prefix: '/api' });
+  // Healthy as soon as the process listens, even while the first crawl is still running.
+  app.get('/health', async () => ({ ok: true }));
 
   const root = opts.webRoot;
   if (root && existsSync(join(root, 'index.html'))) {

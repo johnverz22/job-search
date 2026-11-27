@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useFacets } from '../api/hooks';
 import { Chips } from '../components/Chips';
+import { CrawlBanner } from '../components/CrawlBanner';
 import { DebouncedInput } from '../components/DebouncedInput';
 import { FilterFields } from '../components/FilterFields';
 import { FilterSheet } from '../components/FilterSheet';
@@ -83,6 +84,7 @@ export function Component() {
         </div>
 
         <div className="mb-4 mt-1"><Chips filters={filters} onChange={(f) => setFilters(f)} /></div>
+        <CrawlBanner />
         <ResultsList filters={filters} onChange={(f) => setFilters(f)} />
       </section>
     </div>

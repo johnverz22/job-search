@@ -28,5 +28,14 @@ export const useJob = (id: string) =>
 
 export const useFacets = () => useQuery({ queryKey: ['facets'], queryFn: ({ signal }) => getJson<Facets>('/facets', undefined, signal), staleTime: 5 * 60_000 });
 
+/** Polls every 5s while the server's first crawl is running, then stops. */
+export const useCrawlProgress = () =>
+  useQuery({
+    queryKey: ['crawl'],
+    queryFn: async ({ signal }) => (await getJson<Stats>('/stats', undefined, signal)).crawl ?? null,
+    refetchInterval: (q) => (q.state.data?.ready ? false : 5_000),
+    staleTime: (q) => (q.state.data?.ready ? 5 * 60_000 : 0),
+  });
+
 export const useStats = () =>
   useQuery({ queryKey: ['stats'], queryFn: ({ signal }) => getJson<Stats>('/stats', undefined, signal), refetchInterval: 60_000, refetchIntervalInBackground: false });

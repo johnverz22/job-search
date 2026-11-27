@@ -239,12 +239,12 @@ describe('job page', () => {
 
 describe('status page and routing', () => {
   it('renders platform rows and tiles from /stats', async () => {
-    handler = () => ({ body: { jobs: [{ platform: 'gem', open: 1200, closed: 30 }, { platform: 'workday', open: 5, closed: 0 }], sources: [{ platform: 'gem', state: 'active', n: 40 }, { platform: 'gem', state: 'invalid', n: 2 }, { platform: 'workday', state: 'active', n: 1 }], queue: { due: 3, oldest_due: '2026-11-25T00:00:00Z' } } });
+    handler = () => ({ body: { jobs: [{ platform: 'gem', open: 1200, closed: 0 }, { platform: 'workday', open: 5, closed: 0 }], sources: [{ platform: 'gem', state: 'ok', n: 40 }, { platform: 'gem', state: 'invalid', n: 2 }, { platform: 'workday', state: 'ok', n: 1 }], queue: { due: 3, oldest_due: '2026-11-25T00:00:00Z' }, crawl: { ready: true, total: 43, done: 43 }, memory_mb: 120 } });
     renderAt('/status');
     expect(await screen.findByRole('heading', { name: 'Crawl status' })).toBeInTheDocument();
     expect(screen.getByText('1,205')).toBeInTheDocument(); // open total
     const table = screen.getByRole('table', { name: 'Jobs and sources per platform' });
-    expect(within(table).getByRole('row', { name: /Gem 1,200 30 40 active, 2 invalid/ })).toBeInTheDocument();
+    expect(within(table).getByRole('row', { name: /Gem 1,200 40 ok, 2 invalid/ })).toBeInTheDocument();
   });
 
   it('unknown routes show a not-found page', async () => {
@@ -256,5 +256,45 @@ describe('status page and routing', () => {
     renderAt('/status');
     expect(await screen.findByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main');
     expect(screen.getByRole('main')).toBeInTheDocument();
+  });
+});
+
+describe('crawl banner', () => {
+  const page = { count: 0, limit: 50, next_cursor: null, jobs: [] as Job[] };
+
+  it('says the first crawl is still running, including on an empty list', async () => {
+    handler = (u) => (u.pathname === '/api/jobs' ? { body: page } : u.pathname === '/api/stats' ? { body: { crawl: { ready: false, total: 3, done: 1 } } } : { body: EMPTY_FACETS });
+    renderAt('/');
+    expect(await screen.findByRole('status', { name: 'Crawl progress' })).toHaveTextContent('Still collecting jobs (1/3 sources)');
+    expect(await screen.findByText('No jobs match')).toBeInTheDocument();
+  });
+
+  it('stays hidden once the server is ready', async () => {
+    handler = (u) => (u.pathname === '/api/jobs' ? { body: page } : u.pathname === '/api/stats' ? { body: { crawl: { ready: true, total: 3, done: 3 } } } : { body: EMPTY_FACETS });
+    renderAt('/');
+    await screen.findByText('No jobs match');
+    await waitFor(() => expect(calls.some((u) => u.pathname === '/api/stats')).toBe(true));
+    expect(screen.queryByRole('status', { name: 'Crawl progress' })).toBeNull();
+    expect(jobCalls()).toHaveLength(1);
+  });
+
+  it('refreshes results as sources finish and disappears when done', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let ready = false;
+      handler = (u) => {
+        if (u.pathname === '/api/stats') return { body: { crawl: { ready, total: 2, done: ready ? 2 : 1 } } };
+        if (u.pathname !== '/api/jobs') return { body: EMPTY_FACETS };
+        return { body: ready ? { ...page, count: 1, jobs: [job(1)] } : page };
+      };
+      renderAt('/');
+      await screen.findByRole('status', { name: 'Crawl progress' });
+      ready = true;
+      await vi.advanceTimersByTimeAsync(5_100);
+      expect(await screen.findByRole('link', { name: 'Job 1' })).toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: 'Crawl progress' })).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -44,4 +44,6 @@ export interface Stats {
   jobs: { platform: string; open: number; closed: number }[];
   sources: { platform: string; state: string; n: number }[];
   queue: { due: number; oldest_due: string | null };
+  crawl: { ready: boolean; total: number; done: number };
+  memory_mb: number;
 }
