@@ -98,6 +98,17 @@ describe('crawl loop', () => {
     await agg.stop();
   });
 
+  it('does not overflow the timer on a very long refresh interval', async () => {
+    const spy = vi.spyOn(globalThis, 'setTimeout');
+    const { connectors } = fakes({ a: () => jobs('a', '1') });
+    const agg = make([entry('a')], connectors, { refreshMs: 100_000 * MIN });
+    agg.start();
+    await tick();
+    expect(Math.max(...spy.mock.calls.map((c) => Number(c[1] ?? 0)))).toBe(2 ** 31 - 1);
+    spy.mockRestore();
+    await agg.stop();
+  });
+
   it('computes backoff', () => {
     expect(backoffMs(HOUR, 1)).toBe(2 * HOUR);
     expect(backoffMs(HOUR, 10)).toBe(6 * HOUR);

@@ -10,6 +10,8 @@ const MAX_BACKOFF_MS = 6 * HOUR;
 const INVALID_RETRY_MS = 24 * HOUR;
 const PERMANENT_STATUSES = [400, 401, 403, 404, 410];
 const SNAPSHOT_EVERY_MS = 30_000;
+/** Node fires a longer setTimeout after 1 ms instead, which would spin the loop. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
 
 export interface AggregatorOptions {
   connectors?: Record<Platform, Connector>;
@@ -199,7 +201,7 @@ export function createAggregator(entries: readonly SourceEntry[], opts: Aggregat
     for (const s of waiting) {
       if (inflight.size >= concurrency) return; // a finishing crawl pumps again
       if (s.due > now) {
-        timer = setTimeout(pump, s.due - now);
+        timer = setTimeout(pump, Math.min(s.due - now, MAX_TIMER_MS));
         return;
       }
       s.running = true;

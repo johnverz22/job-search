@@ -7,6 +7,8 @@ services:
         required: false
     environment:
       SNAPSHOT_FILE: /app/snapshot/jobs.ndjson.gz
+    # shutdown waits up to 10s for crawls in progress and then writes the snapshot
+    stop_grace_period: 30s
     ports:
       - "8080:8080"
     volumes:
