@@ -1,0 +1,11 @@
+stripe.com
+airbnb.com
+notion.so
+linear.app
+vercel.com
+figma.com
+anthropic.com
+openai.com
+scale.com
+brex.com
+ramp.com
