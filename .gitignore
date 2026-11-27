@@ -2,3 +2,7 @@ node_modules/
 dist/
 .env
 __pycache__/
+*.ndjson.gz
+*.tmp
+web/test-results/
+web/playwright-report/

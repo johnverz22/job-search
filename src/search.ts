@@ -9,7 +9,7 @@ import { encodeCursor, filterFingerprint, type JobsQuery } from './query.js';
 // Query text
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** English stop words (the snowball list Postgres used). */
+/** English stop words (the snowball list). */
 export const STOP_WORDS = new Set(
   ('i me my myself we our ours ourselves you your yours yourself yourselves he him his himself she her hers herself it its itself '
     + 'they them their theirs themselves what which who whom this that these those am is are was were be been being have has had '

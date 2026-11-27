@@ -1,26 +1,12 @@
 name: ci
 on:
   push:
-    branches: [main]
+    branches: [main, monolith/no-db]
   pull_request:
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: jobsearch
-          POSTGRES_PASSWORD: jobsearch
-          POSTGRES_DB: jobsearch_test
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U jobsearch"
-          --health-interval 5s --health-timeout 3s --health-retries 10
-    env:
-      # Throwaway CI database; the DB-backed tests TRUNCATE it and refuse names without "test".
-      TEST_DATABASE_URL: postgres://jobsearch:jobsearch@localhost:5432/jobsearch_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,8 +17,6 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
-      - name: Worker/DB integration scenarios
-        run: DATABASE_URL="$TEST_DATABASE_URL" npm run test:integration
 
   web:
     runs-on: ubuntu-latest
@@ -56,19 +40,6 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     needs: [test, web]
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: jobsearch
-          POSTGRES_PASSWORD: jobsearch
-          POSTGRES_DB: jobsearch_test
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U jobsearch"
-          --health-interval 5s --health-timeout 3s --health-retries 10
-    env:
-      TEST_DATABASE_URL: postgres://jobsearch:jobsearch@localhost:5432/jobsearch_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -79,14 +50,11 @@ jobs:
             package-lock.json
             web/package-lock.json
       - run: npm ci
+      # Builds web/ (including its npm ci) and then the server
       - run: npm run build
-      - run: npm ci
-        working-directory: web
-      - run: npm run build
-        working-directory: web
       - run: npx playwright install --with-deps chromium
         working-directory: web
-      # Playwright starts web/e2e/serve.mjs itself (seeds the test DB, serves the SPA + API) and runs every spec at 375, 768 and 1280 px.
+      # Playwright starts web/e2e/serve.mjs itself (fake connectors, no network) and runs every spec at 375, 768 and 1280 px.
       - run: npx playwright test
         working-directory: web
       - uses: actions/upload-artifact@v4

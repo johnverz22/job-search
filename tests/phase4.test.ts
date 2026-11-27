@@ -33,7 +33,7 @@ beforeEach(() => {
   h.route = () => undefined;
 });
 
-/** What the worker would load from the store after saving `jobs`. */
+/** What the aggregator would hand back after crawling `jobs`. */
 const toPrevious = (jobs: NormalizedJob[]): FetchContext => ({
   previous: new Map<string, PreviousJob>(jobs.map((j) => [j.externalId, { raw: JSON.parse(JSON.stringify(j.raw)), detailFetchedAt: j.detailFetchedAt ?? null }])),
 });

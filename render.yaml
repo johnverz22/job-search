@@ -1,0 +1,21 @@
+# Render Blueprint. See docs/planning/07-monolith-plan.md section 8 for the deploy runbook.
+services:
+  - type: web
+    name: job-search
+    runtime: node
+    # Free instances sleep when idle and wake up empty (they crawl again). Use a paid instance for real use.
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: CRAWLER_USER_AGENT
+        sync: false # set in the dashboard: name your bot and give a contact address
+      - key: REFRESH_MINUTES
+        value: "60"
+      - key: CRAWL_CONCURRENCY
+        value: "4"

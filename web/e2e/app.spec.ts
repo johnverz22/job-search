@@ -1,14 +1,19 @@
+import { createHash } from 'node:crypto';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 // Breakpoints under test (Tailwind defaults): <1024 uses the filter dialog, >=1024 the sidebar, 768-1023 also shows quick filters.
 const width = (page: Page) => page.viewportSize()!.width;
 const isLg = (page: Page) => width(page) >= 1024;
+// Job ids are derived from platform:company:externalId, so the seeded jobs have fixed URLs.
+const jobUrl = (key: string) => `/jobs/${createHash('sha1').update(key).digest('hex').slice(0, 12)}`;
+const REACT_JOB = jobUrl('gem:acme-inc:react');
+const NO_DESCRIPTION_JOB = jobUrl('workday:globex.wd5/External:nodesc');
 const results = (page: Page) => page.getByRole('region', { name: 'Search results' });
 
 async function openJob(page: Page, title: string) {
   await page.goto(`/?q=${encodeURIComponent(title)}`);
-  await results(page).getByRole('link', { name: title }).first().click();
+  await results(page).getByRole('link', { name: title, exact: true }).first().click();
   await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
 }
 
@@ -18,7 +23,7 @@ test.describe('search', () => {
     await expect(results(page).getByRole('status')).toContainText('50 jobs loaded');
     await page.getByRole('searchbox', { name: 'Search jobs' }).fill('react');
     await expect(page).toHaveURL(/q=react/);
-    const card = results(page).getByRole('link', { name: 'Senior React Developer' });
+    const card = results(page).getByRole('link', { name: 'Senior React Developer', exact: true });
     await expect(card).toBeVisible();
     await card.click();
     await expect(page.getByRole('heading', { level: 1, name: 'Senior React Developer' })).toBeVisible();
@@ -34,7 +39,7 @@ test.describe('search', () => {
     await page.getByRole('button', { name: 'Load more jobs' }).click();
     await expect(status).toContainText('100 jobs loaded');
     await page.getByRole('button', { name: 'Load more jobs' }).click();
-    await expect(status).toContainText('122 jobs loaded'); // 120 support + react + nodesc; the closed job is never listed
+    await expect(status).toContainText('122 jobs loaded'); // 120 support + react + nodesc
     await expect(page.getByText('That’s everything.')).toBeVisible();
   });
 
@@ -55,7 +60,7 @@ test.describe('search', () => {
     }
     await expect(page).toHaveURL(/remote=true/);
     await expect(page.getByRole('list', { name: 'Active filters' }).getByRole('button', { name: 'Remove filter: Remote' })).toBeVisible();
-    await expect(results(page).getByRole('link', { name: 'Senior React Developer' })).toBeVisible();
+    await expect(results(page).getByRole('link', { name: 'Senior React Developer', exact: true })).toBeVisible();
   });
 
   test('md shows quick filters inline; base and lg do not', async ({ page }) => {
@@ -67,6 +72,7 @@ test.describe('search', () => {
 
   test('"/" focuses search and Escape closes the filter dialog', async ({ page }) => {
     await page.goto('/');
+    await expect(results(page).getByRole('status')).toBeVisible(); // the shortcut is registered once the lazy page has mounted
     await page.keyboard.press('/');
     await expect(page.getByRole('searchbox', { name: 'Search jobs' })).toBeFocused();
     if (!isLg(page)) {
@@ -96,17 +102,15 @@ test.describe('job page', () => {
     await expect(page.getByRole('link', { name: /^Apply for Senior React Developer/ }).first()).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
-  // Seeded ids are deterministic (TRUNCATE ... RESTART IDENTITY): 1 = React job, 2 = closed job, 3 = job without a description.
-  test('a closed job is flagged and still reachable by deep link (SPA fallback)', async ({ page }) => {
-    await page.goto('/jobs/2');
-    await expect(page.getByText('This posting is no longer open')).toBeVisible();
-    await expect(page.getByRole('heading', { level: 1, name: 'Retired Architect' })).toBeVisible();
+  test('a job is reachable by deep link (SPA fallback)', async ({ page }) => {
+    await page.goto(REACT_JOB);
+    await expect(page.getByRole('heading', { level: 1, name: 'Senior React Developer' })).toBeVisible();
   });
 
   test('a job without a description says so; unknown ids are a clear 404 page', async ({ page }) => {
-    await page.goto('/jobs/3');
+    await page.goto(NO_DESCRIPTION_JOB);
     await expect(page.getByText(/description isn’t available yet/)).toBeVisible();
-    await page.goto('/jobs/99999999');
+    await page.goto('/jobs/000000000000');
     await expect(page.getByRole('heading', { name: 'Job not found' })).toBeVisible();
   });
 
@@ -146,7 +150,7 @@ test.describe('content security policy', () => {
       expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('hidden');
       await page.keyboard.press('Escape');
     }
-    await page.goto('/jobs/1');
+    await page.goto(REACT_JOB);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     expect(violations).toEqual([]);
   });

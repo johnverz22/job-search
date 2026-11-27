@@ -26,14 +26,14 @@ export interface NormalizedJob {
   detailFetchedAt?: string | null;
 }
 
-/** What the store already knows about one job of the source being crawled; handed to connectors that opt into the detail cache. */
+/** What the aggregator already knows about one job of the source being crawled; handed to connectors that opt into the detail cache. */
 export interface PreviousJob {
   raw: unknown;
   detailFetchedAt: string | null;
 }
 
 export interface FetchContext {
-  /** external_id -> stored job. Only provided to connectors with `cachesDetail: true`. */
+  /** external_id -> job from the last crawl. Only provided to connectors with `cachesDetail: true`. */
   previous?: Map<string, PreviousJob>;
 }
 
@@ -41,6 +41,6 @@ export interface Connector {
   platform: Platform;
   /** `slug` is the company identifier; for Teamtailor it is the careers host (e.g. "acme.teamtailor.com" or "careers.acme.com"). */
   fetchJobs(slug: string, ctx?: FetchContext): Promise<NormalizedJob[]>;
-  /** True if the connector reuses `ctx.previous` to skip per-job detail requests; the worker then loads it. */
+  /** True if the connector reuses `ctx.previous` to skip per-job detail requests; the aggregator then supplies it. */
   cachesDetail?: boolean;
 }
