@@ -1,7 +1,6 @@
-import type { Db } from './app.js';
+import type { Aggregator, JobRecord } from './model.js';
 
 export const FACET_LIMIT = 50;
-export const FACET_TTL_MS = 5 * 60_000;
 
 export interface FacetValue {
   value: string;
@@ -16,35 +15,38 @@ export interface Facets {
   salary_currency: FacetValue[];
 }
 
-/** One round trip: top values (by open-job count) for every filterable column. Locations are unnested from the array. */
-export const FACETS_SQL = `
-  SELECT facet, value, count FROM (
-    SELECT facet, value, count, row_number() OVER (PARTITION BY facet ORDER BY count DESC, value) AS rn FROM (
-      SELECT 'platform' AS facet, platform AS value, count(*)::int AS count FROM jobs WHERE status='open' GROUP BY 2
-      UNION ALL SELECT 'employment_type', employment_type, count(*)::int FROM jobs WHERE status='open' AND employment_type IS NOT NULL GROUP BY 2
-      UNION ALL SELECT 'seniority', seniority, count(*)::int FROM jobs WHERE status='open' AND seniority IS NOT NULL GROUP BY 2
-      UNION ALL SELECT 'department', department, count(*)::int FROM jobs WHERE status='open' AND department IS NOT NULL GROUP BY 2
-      UNION ALL SELECT 'location', loc, count(*)::int FROM jobs, unnest(locations) AS loc WHERE status='open' GROUP BY 2
-      UNION ALL SELECT 'salary_currency', upper(salary_currency), count(*)::int FROM jobs WHERE status='open' AND salary_currency IS NOT NULL GROUP BY 2
-    ) all_facets WHERE value <> ''
-  ) ranked WHERE rn <= ${FACET_LIMIT} ORDER BY facet, count DESC, value`;
-
-const empty = (): Facets => ({ platform: [], employment_type: [], seniority: [], department: [], location: [], salary_currency: [] });
-
-export async function loadFacets(db: Db): Promise<Facets> {
-  const { rows } = await db.query<{ facet: keyof Facets; value: string; count: number }>(FACETS_SQL);
-  const out = empty();
-  for (const r of rows) out[r.facet]?.push({ value: r.value, count: Number(r.count) });
-  return out;
+/** Top values (by job count, then value) for every filterable field. Locations are counted individually. */
+export function computeFacets(all: readonly JobRecord[]): Facets {
+  const counts: Record<keyof Facets, Map<string, number>> = {
+    platform: new Map(), employment_type: new Map(), seniority: new Map(), department: new Map(), location: new Map(), salary_currency: new Map(),
+  };
+  const add = (facet: keyof Facets, value: string | null) => {
+    if (value) counts[facet].set(value, (counts[facet].get(value) ?? 0) + 1);
+  };
+  for (const r of all) {
+    add('platform', r.platform);
+    add('employment_type', r.employmentType);
+    add('seniority', r.seniority);
+    add('department', r.department);
+    for (const l of r.locations) add('location', l);
+    add('salary_currency', r.salaryCurrency?.toUpperCase() ?? null);
+  }
+  const top = (m: Map<string, number>): FacetValue[] =>
+    [...m].map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0))
+      .slice(0, FACET_LIMIT);
+  return {
+    platform: top(counts.platform), employment_type: top(counts.employment_type), seniority: top(counts.seniority),
+    department: top(counts.department), location: top(counts.location), salary_currency: top(counts.salary_currency),
+  };
 }
 
-/** In-memory cache so a busy UI does not rerun the aggregate on every page load. */
-export function cachedFacets(db: Db, ttlMs = FACET_TTL_MS, now: () => number = Date.now) {
-  let hit: { at: number; value: Facets } | null = null;
-  let inflight: Promise<Facets> | null = null;
-  return async (): Promise<Facets> => {
-    if (hit && now() - hit.at < ttlMs) return hit.value;
-    inflight ??= loadFacets(db).then((value) => { hit = { at: now(), value }; return value; }).finally(() => { inflight = null; });
-    return inflight;
+/** Recomputes only when the aggregator publishes a new version. */
+export function cachedFacets(agg: Pick<Aggregator, 'all' | 'version'>): () => Facets {
+  let hit: { version: number; value: Facets } | null = null;
+  return () => {
+    const version = agg.version();
+    if (hit?.version !== version) hit = { version, value: computeFacets(agg.all()) };
+    return hit.value;
   };
 }

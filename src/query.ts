@@ -1,10 +1,8 @@
 import { createHash } from 'node:crypto';
+import { isJobId } from './model.js';
 import { PLATFORMS } from './types.js';
 
-/**
- * Query building for GET /jobs. Pure functions only (no DB access) so every branch is unit-testable;
- * tests/api.db.test.ts then proves the generated SQL against a real Postgres.
- */
+/** Parsing and validation for GET /jobs, and the opaque paging cursor. Matching and ordering live in src/search.ts. */
 
 export class QueryError extends Error {}
 
@@ -19,7 +17,7 @@ const MAX_LIST_ITEMS = 20;
 
 /** Single source of truth for the accepted query parameters; src/openapi.ts renders the docs from it. */
 export const JOB_PARAMS = {
-  q: { type: 'string', description: `Full-text search (Postgres websearch syntax: "quoted phrase", -excluded, or). Max ${MAX_Q_LENGTH} chars. Matches title, department, company and description.` },
+  q: { type: 'string', description: `Text search: all words must match (word prefixes, light stemming); supports "quoted phrase", -excluded and or. Max ${MAX_Q_LENGTH} chars. Matches title, department, company and description.` },
   sort: { type: 'string', enum: [...SORTS], description: 'relevance (default when q is set; best match first) or newest (default otherwise). relevance requires q.' },
   limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, description: `Page size, default ${DEFAULT_LIMIT}.` },
   cursor: { type: 'string', description: 'Opaque next_cursor from a previous response. Only valid with the same filters and sort that produced it.' },
@@ -65,10 +63,10 @@ export interface JobsQuery {
 }
 
 export interface CursorPayload {
-  v: 1;
+  v: 2;
   s: Sort;
   f: string; // fingerprint of the filters the cursor was issued for
-  t: string; // sort_ts as Postgres text (keeps microseconds; a JS Date would lose them)
+  t: number; // sortTs of the last row
   r?: number; // relevance of the last row (relevance sort only)
   i: string; // job id
 }
@@ -204,8 +202,6 @@ export function filterFingerprint(q: JobsQuery): string {
 
 export const encodeCursor = (c: CursorPayload): string => Buffer.from(JSON.stringify(c)).toString('base64url');
 
-const PG_TIMESTAMP = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,6})?([+-]\d{2}(:\d{2})?)$/;
-
 export function decodeCursor(s: string): CursorPayload {
   const bad = () => new QueryError('invalid cursor');
   let p: unknown;
@@ -216,106 +212,9 @@ export function decodeCursor(s: string): CursorPayload {
   }
   if (!p || typeof p !== 'object') throw bad();
   const c = p as Record<string, unknown>;
-  if (c.v !== 1 || !(SORTS as readonly unknown[]).includes(c.s)) throw bad();
-  if (typeof c.f !== 'string' || typeof c.t !== 'string' || !PG_TIMESTAMP.test(c.t)) throw bad();
-  if (typeof c.i !== 'string' || !/^\d{1,18}$/.test(c.i)) throw bad();
+  if (c.v !== 2 || !(SORTS as readonly unknown[]).includes(c.s)) throw bad();
+  if (typeof c.f !== 'string' || typeof c.t !== 'number' || !Number.isFinite(c.t)) throw bad();
+  if (typeof c.i !== 'string' || !isJobId(c.i)) throw bad();
   if (c.s === 'relevance' ? typeof c.r !== 'number' || !Number.isFinite(c.r) : c.r !== undefined) throw bad();
   return c as unknown as CursorPayload;
 }
-
-// ---------------------------------------------------------------------------------------------------------------------
-// SQL generation
-// ---------------------------------------------------------------------------------------------------------------------
-
-const LIST_COLUMNS = [
-  'id', 'platform', 'company_slug', 'title', 'locations', 'remote', 'department', 'employment_type', 'seniority',
-  'salary_min', 'salary_max', 'salary_currency', 'salary_text', 'posted_at', 'apply_url', 'first_seen', 'last_seen', 'dedupe_key',
-];
-
-/** Escape LIKE/ILIKE wildcards so user input is matched literally. */
-export const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
-
-export interface BuiltQuery {
-  text: string;
-  values: unknown[];
-}
-
-/** Builds the page query. Fetches limit + 1 rows so the caller can tell whether another page exists. */
-export function buildJobsQuery(q: JobsQuery): BuiltQuery {
-  const values: unknown[] = [];
-  const bind = (v: unknown) => `$${values.push(v)}`;
-  const where: string[] = [`status = 'open'`];
-
-  const tsq = q.q ? `websearch_to_tsquery('english', ${bind(q.q)})` : null;
-  if (tsq) where.push(`search_tsv @@ ${tsq}`);
-  if (q.platform) where.push(`platform = ANY(${bind(q.platform)}::text[])`);
-  if (q.company) where.push(`company_slug = ANY(${bind(q.company)}::text[])`);
-  if (q.department) where.push(`department ILIKE ${bind(`%${escapeLike(q.department)}%`)}`);
-  if (q.location) where.push(`EXISTS (SELECT 1 FROM unnest(locations) AS loc WHERE loc ILIKE ${bind(`%${escapeLike(q.location)}%`)})`);
-  if (q.employmentType) where.push(`lower(employment_type) = ANY(${bind(q.employmentType.map((s) => s.toLowerCase()))}::text[])`);
-  if (q.seniority) where.push(`lower(seniority) = ANY(${bind(q.seniority.map((s) => s.toLowerCase()))}::text[])`);
-  if (q.remote !== undefined) where.push(`remote IS ${q.remote ? 'TRUE' : 'FALSE'}`);
-  if (q.hasSalary !== undefined) where.push(q.hasSalary ? '(salary_min IS NOT NULL OR salary_max IS NOT NULL)' : '(salary_min IS NULL AND salary_max IS NULL)');
-  if (q.salaryCurrency) where.push(`salary_currency = ${bind(q.salaryCurrency)}`);
-  if (q.minSalary !== undefined) where.push(`coalesce(salary_max, salary_min) >= ${bind(q.minSalary)}`);
-  if (q.maxSalary !== undefined) where.push(`coalesce(salary_min, salary_max) <= ${bind(q.maxSalary)}`);
-  if (q.postedAfter) where.push(`sort_ts >= ${bind(q.postedAfter)}::timestamptz`);
-  if (q.postedWithinDays) where.push(`sort_ts >= now() - make_interval(days => ${bind(q.postedWithinDays)}::int)`);
-
-  const rel = tsq ? `, ts_rank_cd(search_tsv, ${tsq}, 1)::float8 AS _rel` : '';
-  const useRel = q.sort === 'relevance';
-  const order = useRel ? '_rel DESC, sort_ts DESC, id DESC' : 'sort_ts DESC, id DESC';
-  const cols = `${LIST_COLUMNS.join(', ')}, sort_ts${rel}`;
-
-  // DISTINCT ON keeps the best-ranked / newest row per duplicate group. coalesce handles legacy rows with no dedupe_key
-  // (otherwise DISTINCT ON would collapse every such row into one).
-  const base = q.distinct
-    ? `SELECT DISTINCT ON (coalesce(dedupe_key, key)) ${cols} FROM jobs WHERE ${where.join(' AND ')} ORDER BY coalesce(dedupe_key, key), ${order}`
-    : `SELECT ${cols} FROM jobs WHERE ${where.join(' AND ')}`;
-
-  const outerWhere: string[] = [];
-  if (q.cursor) {
-    const c = q.cursor;
-    outerWhere.push(useRel
-      ? `(_rel, sort_ts, id) < (${bind(c.r)}::float8, ${bind(c.t)}::timestamptz, ${bind(c.i)}::bigint)`
-      : `(sort_ts, id) < (${bind(c.t)}::timestamptz, ${bind(c.i)}::bigint)`);
-  }
-
-  const text = `WITH base AS (${base})
-SELECT *, sort_ts::text AS _sort_ts FROM base${outerWhere.length ? ` WHERE ${outerWhere.join(' AND ')}` : ''}
-ORDER BY ${order} LIMIT ${bind(q.limit + 1)}${q.offset ? ` OFFSET ${bind(q.offset)}` : ''}`;
-  return { text, values };
-}
-
-export interface JobsPage {
-  count: number;
-  limit: number;
-  offset?: number;
-  next_cursor: string | null;
-  jobs: Record<string, unknown>[];
-}
-
-/** Trims the extra look-ahead row, derives next_cursor from the last returned row, and strips internal columns. */
-export function toPage(q: JobsQuery, rows: Record<string, unknown>[]): JobsPage {
-  const hasMore = rows.length > q.limit;
-  const pageRows = hasMore ? rows.slice(0, q.limit) : rows;
-  const last = pageRows[pageRows.length - 1];
-  const next_cursor = hasMore && last
-    ? encodeCursor({
-        v: 1,
-        s: q.sort,
-        f: filterFingerprint(q),
-        t: String(last._sort_ts),
-        ...(q.sort === 'relevance' ? { r: Number(last._rel) } : {}),
-        i: String(last.id),
-      })
-    : null;
-  const jobs = pageRows.map((row) => {
-    const { _sort_ts, _rel, sort_ts, ...job } = row;
-    return q.q ? { ...job, relevance: Number(_rel) } : job;
-  });
-  return { count: jobs.length, limit: q.limit, ...(q.offset !== undefined ? { offset: q.offset } : {}), next_cursor, jobs };
-}
-
-export const DETAIL_SQL = `SELECT ${LIST_COLUMNS.join(', ')}, key, external_id, status, description_html FROM jobs WHERE id = $1::bigint`;
-export const isJobId = (s: string) => /^\d{1,18}$/.test(s);
