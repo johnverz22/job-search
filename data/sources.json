@@ -1,0 +1,7 @@
+{
+  "sources": [
+    { "platform": "gem", "slug": "superblocks" },
+    { "platform": "personio", "slug": "aiya-europe" },
+    { "platform": "pinpoint", "slug": "safetywing" }
+  ]
+}

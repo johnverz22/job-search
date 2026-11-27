@@ -1,7 +1,7 @@
 # Plan: single-process monolith, no database
 
 Branch: `monolith/no-db` (off `main`; `main` is tagged `db-architecture` so the Postgres version is always recoverable).
-Status: **planned, nothing implemented on this branch yet.** Each session below is written to be run on its own, in a fresh conversation, without having seen the others. Read sections 1-3 first, then only your session.
+Status: **S1 done (contracts, sources file, record builder); S2-S9 not started.** Each session below is written to be run on its own, in a fresh conversation, without having seen the others. Read sections 1-3 first, then only your session.
 
 ## 1. What changes
 
@@ -106,6 +106,7 @@ Also exported from `model.ts`: `jobId(key: string): string`, `toRecord(j: Normal
 Each session: start from `monolith/no-db`, work on its own sub-branch `monolith/sN-name` if running in parallel, merge back when green. Tests must pass on their own (`npm test` for backend, `npm test --prefix web` for the UI). Do not edit files owned by another session; if a contract needs to change, change section 3 here in the same commit and say so.
 
 ### S1 - Contracts, sources file, record builder (small; do first)
+**Status: done.** Beyond the contract, `src/model.ts` also exports `jobKey()`, `isJobId()`, `ID_PATTERN`, `htmlToSearchText()`, `MAX_DESCRIPTION_CHARS` (100,000) and `MAX_BODY_CHARS` (20,000); `src/sources.ts` exports `parseSources(text, origin)`, `loadSources(path?)`, `sourcesPath()`, `DEFAULT_SOURCES_FILE` and `SourcesError`. A description cut mid-tag by the cap does not leak tag attributes into the search body. `salaryCurrency` is upper-cased in the record. Tests: `tests/model.test.ts`, `tests/sources.test.ts`.
 - **Goal:** unblock everyone else.
 - **Do:** create `src/model.ts` (types, `jobId`, `toRecord`), `src/sources.ts` (`loadSources`), `data/sources.json` with the three seeds.
 - **Tests:** `toRecord` keeps `firstSeen` from `prev`, sets `sortTs` from `postedAt` else `firstSeen`, strips tags into `search.body`, caps `descriptionHtml` (100 kB) and `body` (20k), stable `jobId`; `loadSources` accepts a valid file and rejects an unknown platform, a missing slug, bad JSON (message names the entry).
