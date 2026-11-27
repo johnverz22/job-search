@@ -26,7 +26,12 @@ export const EMPTY_FILTERS: Filters = {
   salary_currency: '', min_salary: '', max_salary: '', has_salary: 'any', posted_within_days: null, distinct: true,
 };
 
-export const POSTED_OPTIONS = [{ days: 1, label: 'Last 24 hours' }, { days: 7, label: 'Last 7 days' }, { days: 30, label: 'Last 30 days' }];
+export const POSTED_OPTIONS = [
+  { days: 1, label: 'Last 24 hours' },
+  { days: 2, label: 'Last 48 hours' },
+  { days: 7, label: 'Last 7 days' },
+  { days: 30, label: 'Last 30 days' },
+];
 const LIST_KEYS = ['platform', 'company', 'employment_type', 'seniority'] as const;
 const MAX_LIST = 20; // API limit per list parameter
 

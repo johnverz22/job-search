@@ -75,6 +75,22 @@ describe('crawl loop', () => {
     await agg.stop();
   });
 
+  it('deletes jobs whose sortTs is older than maxJobAgeMs, keeping the boundary', async () => {
+    const { connectors } = fakes({
+      a: () => [
+        normalized('fresh', { companySlug: 'a' }), // no postedAt: sortTs = firstSeen = now
+        normalized('edge', { companySlug: 'a', postedAt: '2026-11-20T00:00:00Z' }), // exactly 7d before fake now: kept
+        normalized('stale', { companySlug: 'a', postedAt: '2026-11-19T23:59:59Z' }), // 1s past: dropped
+      ],
+    });
+    const agg = make([entry('a')], connectors);
+    agg.start();
+    await tick();
+    expect(agg.all().map((r) => r.externalId).sort()).toEqual(['edge', 'fresh']);
+    expect(agg.states()[0].jobs).toBe(2);
+    await agg.stop();
+  });
+
   it('backs off a failing source, caps at 6h, and keeps its jobs until they are stale', async () => {
     let fail = false;
     const { connectors, calls } = fakes({ a: () => { if (fail) throw new Error('boom'); return jobs('a', '1'); } });
@@ -203,9 +219,9 @@ describe('crawl loop', () => {
   });
 
   it('reads configuration from the environment', () => {
-    expect(optionsFromEnv({})).toEqual({ concurrency: 4, refreshMs: HOUR, staleMs: 72 * HOUR, snapshotFile: undefined });
-    expect(optionsFromEnv({ CRAWL_CONCURRENCY: '2', REFRESH_MINUTES: '5', STALE_HOURS: 'junk', SNAPSHOT_FILE: '/x' }))
-      .toEqual({ concurrency: 2, refreshMs: 5 * MIN, staleMs: 72 * HOUR, snapshotFile: '/x' });
+    expect(optionsFromEnv({})).toEqual({ concurrency: 4, refreshMs: HOUR, staleMs: 72 * HOUR, maxJobAgeMs: 7 * 24 * HOUR, snapshotFile: undefined });
+    expect(optionsFromEnv({ CRAWL_CONCURRENCY: '2', REFRESH_MINUTES: '5', STALE_HOURS: 'junk', JOB_MAX_AGE_DAYS: '14', SNAPSHOT_FILE: '/x' }))
+      .toEqual({ concurrency: 2, refreshMs: 5 * MIN, staleMs: 72 * HOUR, maxJobAgeMs: 14 * 24 * HOUR, snapshotFile: '/x' });
   });
 });
 

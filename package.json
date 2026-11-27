@@ -17,13 +17,14 @@
     "test": "vitest run",
     "cli": "tsx src/cli.ts",
     "discover": "tsx src/discover.ts",
+    "crawl": "tsx src/crawl.ts",
     "web:install": "npm ci --prefix web",
     "web:build": "npm run build --prefix web",
     "web:test": "npm test --prefix web"
   },
   "dependencies": {
     "@fastify/static": "^10.1.12",
-    "fast-xml-parser": "^4.5.0",
+    "fast-xml-parser": "^5.12.1",
     "fastify": "^5.0.0"
   },
   "devDependencies": {
@@ -34,6 +35,6 @@
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.74.0",
-    "vitest": "^2.1.0"
+    "vitest": "^5.1.2"
   }
 }

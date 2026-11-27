@@ -6,6 +6,7 @@ import { readSnapshot, writeSnapshot } from './snapshot.js';
 import type { Connector, Platform, PreviousJob } from './types.js';
 
 const HOUR = 3600_000;
+const DAY = 24 * HOUR;
 const MAX_BACKOFF_MS = 6 * HOUR;
 const INVALID_RETRY_MS = 24 * HOUR;
 const PERMANENT_STATUSES = [400, 401, 403, 404, 410];
@@ -18,6 +19,8 @@ export interface AggregatorOptions {
   concurrency?: number;
   refreshMs?: number;
   staleMs?: number;
+  /** Jobs whose sortTs (postedAt, else firstSeen) is older than this are deleted. */
+  maxJobAgeMs?: number;
   snapshotFile?: string;
   /** How long stop() waits for crawls in progress. */
   stopTimeoutMs?: number;
@@ -35,6 +38,7 @@ export function optionsFromEnv(env: NodeJS.ProcessEnv = process.env): Aggregator
     concurrency: Math.max(1, Math.floor(positive(env.CRAWL_CONCURRENCY, 4))),
     refreshMs: positive(env.REFRESH_MINUTES, 60) * 60_000,
     staleMs: positive(env.STALE_HOURS, 72) * HOUR,
+    maxJobAgeMs: positive(env.JOB_MAX_AGE_DAYS, 7) * DAY,
     snapshotFile: env.SNAPSHOT_FILE || undefined,
   };
 }
@@ -54,7 +58,7 @@ interface Source {
 
 export function createAggregator(entries: readonly SourceEntry[], opts: AggregatorOptions = {}): Aggregator {
   const {
-    connectors = liveConnectors, concurrency = 4, refreshMs = HOUR, staleMs = 72 * HOUR, snapshotFile,
+    connectors = liveConnectors, concurrency = 4, refreshMs = HOUR, staleMs = 72 * HOUR, maxJobAgeMs = 7 * DAY, snapshotFile,
     stopTimeoutMs = 10_000, random = Math.random, log = console.log,
   } = opts;
 
@@ -80,7 +84,22 @@ export function createAggregator(entries: readonly SourceEntry[], opts: Aggregat
   let timer: NodeJS.Timeout | undefined;
   const inflight = new Set<Promise<void>>();
 
+  /** Deletes records too old to be worth keeping; runs on every publish so `all` never holds them. */
+  function prune() {
+    const cutoff = Date.now() - maxJobAgeMs;
+    let removed = 0;
+    for (const s of sources) {
+      if (!s.records.some((r) => r.sortTs < cutoff)) continue;
+      const kept = s.records.filter((r) => r.sortTs >= cutoff);
+      removed += s.records.length - kept.length;
+      s.records = kept;
+      s.state.jobs = kept.length;
+    }
+    if (removed) log(`prune: dropped ${removed} job(s) older than ${Math.round(maxJobAgeMs / DAY)}d`);
+  }
+
   function publish() {
+    prune();
     const next = new Map<string, JobRecord>();
     for (const s of sources) for (const r of s.records) next.set(r.id, r);
     byId = next;

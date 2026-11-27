@@ -7,7 +7,7 @@ export const normalized = (externalId: string, o: Partial<NormalizedJob> = {}): 
   postedAt: null, applyUrl: null, raw: null, ...o,
 });
 
-export const record = (externalId: string, o: Partial<NormalizedJob> = {}, firstSeen = '2026-11-01T00:00:00Z'): JobRecord =>
+export const record = (externalId: string, o: Partial<NormalizedJob> = {}, firstSeen = new Date().toISOString()): JobRecord =>
   toRecord(normalized(externalId, o), undefined, new Date(firstSeen));
 
 /** A static Aggregator for HTTP and facet tests. `set` publishes a new array. */

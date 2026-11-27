@@ -69,7 +69,7 @@ Location: `web/` with its own `package.json` (the backend package stays untouche
   - Platform: multi-select of the 13 platforms
   - Company: typeahead over company slugs, multi
   - Salary: currency select + min/max. **The currency is required by the API**, so min/max stay disabled until one is chosen. Helper text: amounts are as advertised, not normalized per hour/month/year. Plus a "Has salary" toggle.
-  - Posted: Any / 24 h / 7 d / 30 d (`posted_within_days`)
+  - Posted: Any time / 24 h / 48 h / 7 d / 30 d (`posted_within_days`). Jobs older than `JOB_MAX_AGE_DAYS` (default 7) are deleted by the crawler, so "Any time" never grows unboundedly.
   - "Hide duplicate postings" (`distinct`), **on by default** in the UI
 - **Result card**: title, company (prettified slug), locations (first two + "+N"), badges (Remote, employment type, seniority), salary (`salary_text` if present, else formatted range + currency), relative posted date (`posted_at`, else "first seen"), platform label. Whole card links to `/jobs/:id`; a secondary "Apply" opens `apply_url` in a new tab with `rel="noopener noreferrer"`.
 - **Pagination**: a "Load more" button driven by `next_cursor` (not infinite scroll: keeps the footer and keyboard users reachable). Page size 50. Results count shows "50 loaded" because the API returns no total (see section 6 if we want one).
