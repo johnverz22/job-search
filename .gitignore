@@ -6,3 +6,4 @@ __pycache__/
 *.tmp
 web/test-results/
 web/playwright-report/
+.vercel

@@ -13,6 +13,15 @@ npm start          # http://localhost:8080
 ```
 or `docker compose up --build`.
 
+## Deploy on Vercel (snapshot mode)
+Vercel has no long-running process, so the API cannot crawl there. Instead a scheduled GitHub Action (`.github/workflows/crawl.yml`) runs `npm run crawl` every 6 hours and commits `data/jobs.snapshot`; the push redeploys the site, and `api/[...all].js` serves the API read-only from that file. `ready` is always true and `/api/stats` shows the snapshot's sources.
+
+1. Import the repo in Vercel. Framework preset **Other**, root directory = repo root (defaults come from `vercel.json`: build `npm run build`, output `web/dist`).
+2. Push the branch — the first deploy works even before the first snapshot exists (empty job list until the Action runs).
+3. Optionally run the Action once now: Actions → "job snapshot" → Run workflow.
+
+To refresh more often, edit the cron in `crawl.yml`. To add a source, `npm run cli -- add ...`, commit, and the next scheduled crawl picks it up.
+
 ## Sources
 ```bash
 npm run cli -- list

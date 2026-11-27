@@ -2,6 +2,8 @@ name: ci
 on:
   push:
     branches: [main, monolith/no-db]
+    # Snapshot-only commits (the scheduled crawl) still trigger a Vercel deploy but need no CI run.
+    paths-ignore: ['data/jobs.snapshot']
   pull_request:
 
 jobs:

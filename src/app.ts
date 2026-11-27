@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
-import fastifyStatic from '@fastify/static';
+
 import { cachedFacets } from './facets.js';
 import { isJobId, type Aggregator, type SourceState } from './model.js';
 import { openapiSpec } from './openapi.js';
@@ -112,6 +113,8 @@ export function buildServer(agg: Aggregator, opts: ServerOptions = {}) {
 
   const root = opts.webRoot;
   if (root && existsSync(join(root, 'index.html'))) {
+    // Required lazily so API-only deploys (e.g. serverless, where it is never registered) do not load it.
+    const fastifyStatic = createRequire(import.meta.url)('@fastify/static') as typeof import('@fastify/static').default;
     app.register(fastifyStatic, {
       root, wildcard: false, index: ['index.html'],
       // Vite fingerprints everything under /assets, so it can be cached forever; index.html must always revalidate.
