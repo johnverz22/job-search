@@ -1,50 +1,68 @@
+/** Finds ATS boards and adds the ones that answer to data/sources.json. */
 import { readFileSync } from 'node:fs';
-import { pool } from './db.js';
-import { getText } from './http.js';
-import { detectAts, dedupe, discoverablePlatforms, extractSlug, type Candidate } from './discovery/patterns.js';
+import { pathToFileURL } from 'node:url';
 import { discoverCustomDomains } from './discovery/customDomains.js';
+import { detectAts, discoverablePlatforms, extractSlug, type Candidate } from './discovery/patterns.js';
 import { commonCrawlCandidates, crtshCandidates } from './discovery/sources.js';
-import { upsertCandidates, validateBatch } from './discovery/store.js';
+import { addCandidates, type AddOptions } from './discovery/validate.js';
+import { getText } from './http.js';
+import { sourcesPath } from './sources.js';
 import { PLATFORMS, type Platform } from './types.js';
 
-const args = process.argv.slice(2);
-const flag = (n: string) => args.includes(`--${n}`);
-const opt = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
-const pos = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1].startsWith('--') && !['dry'].includes(args[i - 1].slice(2))));
-const [cmd, target] = pos;
-
-const usage = `usage: discover <command> [--dry]
+export const usage = `usage: discover <command> [--dry] [--limit N]
   crtsh <platform>              hostnames from Certificate Transparency (subdomain platforms)
   cc <platform> [--pages N] [--crawl CC-MAIN-YYYY-WW]   Common Crawl index (N index pages, default 5)
   urls <file|->                 extract slugs from a file of URLs (one per line), e.g. exported search results
   page <url>                    detect ATS boards linked/embedded on a company careers page
   domains <file|->              seed list of company domains/careers URLs (one per line): scan their careers pages and probe
                                 the hosts for custom-domain Recruitee/Personio/Rippling/Teamtailor boards
-  validate [--limit N]          probe unvalidated candidates; enable the valid ones (default 100)
 platforms: ${discoverablePlatforms.join(', ')}
---dry prints candidates without touching the database`;
+Each new candidate is probed and added to data/sources.json (or $SOURCES_FILE) only if its board answers.
+--limit N  probe at most N new candidates (default 100)
+--dry      list candidates; probe and write nothing`;
 
-async function save(cands: Candidate[], via: string) {
-  cands = dedupe(cands);
-  const byPlatform = cands.reduce<Record<string, number>>((a, c) => ((a[c.platform] = (a[c.platform] ?? 0) + 1), a), {});
-  console.log(`found ${cands.length} unique candidates`, byPlatform);
-  if (flag('dry')) { console.log(cands.slice(0, 50)); return; }
-  console.log(`inserted ${await upsertCandidates(cands, via)} new sources (disabled until validated)`);
+const VALUE_FLAGS = ['--limit', '--pages', '--crawl'];
+
+export function parseArgs(args: readonly string[]) {
+  const positional: string[] = [];
+  const options: Record<string, string> = {};
+  let dry = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--dry') dry = true;
+    else if (VALUE_FLAGS.includes(a) && args[i + 1] !== undefined) options[a.slice(2)] = args[++i];
+    else if (a.startsWith('--')) return null;
+    else positional.push(a);
+  }
+  const limit = options.limit === undefined ? undefined : Number(options.limit);
+  if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) return null;
+  return { command: positional[0], target: positional[1], dry, limit, pages: Number(options.pages ?? 5), crawl: options.crawl };
 }
 
-async function main() {
-  const platform = target as Platform;
-  if (cmd === 'crtsh' && PLATFORMS.includes(platform)) await save(await crtshCandidates(platform), 'crtsh');
-  else if (cmd === 'cc' && PLATFORMS.includes(platform)) await save(await commonCrawlCandidates(platform, { maxPages: Number(opt('pages') ?? 5), crawl: opt('crawl') }), 'commoncrawl');
-  else if (cmd === 'urls' && target) {
-    const text = target === '-' ? readFileSync(0, 'utf8') : readFileSync(target, 'utf8');
-    await save(text.split(/\r?\n/).map((l) => extractSlug(l.trim())).filter((c): c is Candidate => !!c), 'urls');
-  } else if (cmd === 'domains' && target) {
-    const text = target === '-' ? readFileSync(0, 'utf8') : readFileSync(target, 'utf8');
-    await save(await discoverCustomDomains(text.split(/\r?\n/)), 'domains');
-  } else if (cmd === 'page' && target) await save(detectAts(await getText(target), target), `page:${target}`.slice(0, 200));
-  else if (cmd === 'validate') console.log(await validateBatch(Number(opt('limit') ?? 100)));
-  else { console.log(usage); process.exitCode = 1; }
-  await pool.end();
+const readLines = (target: string) => readFileSync(target === '-' ? 0 : target, 'utf8').split(/\r?\n/);
+
+/** Returns the exit code. `deps` lets tests supply connectors, the file and a logger. */
+export async function runDiscover(argv: readonly string[], deps: Partial<AddOptions> = {}): Promise<number> {
+  const log = deps.log ?? console.log;
+  const args = parseArgs(argv);
+  const platform = args?.target as Platform;
+  const known = PLATFORMS.includes(platform);
+  let candidates: Candidate[] | null = null;
+  if (args?.command === 'crtsh' && known) candidates = await crtshCandidates(platform, log);
+  else if (args?.command === 'cc' && known) candidates = await commonCrawlCandidates(platform, { maxPages: args.pages, crawl: args.crawl }, log);
+  else if (args?.command === 'urls' && args.target) candidates = readLines(args.target).map((l) => extractSlug(l.trim())).filter((c): c is Candidate => !!c);
+  else if (args?.command === 'domains' && args.target) candidates = await discoverCustomDomains(readLines(args.target), undefined, log);
+  else if (args?.command === 'page' && args.target) candidates = detectAts(await getText(args.target), args.target);
+  if (!args || !candidates) {
+    log(usage);
+    return 1;
+  }
+  await addCandidates(candidates, { file: sourcesPath(), ...deps, dry: args.dry, limit: args.limit });
+  return 0;
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  runDiscover(process.argv.slice(2))
+    .then((code) => { process.exitCode = code; })
+    .catch((e) => { console.error((e as Error).message ?? e); process.exitCode = 1; });
+}
