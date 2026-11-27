@@ -1,5 +1,7 @@
 # Implementation Plan
 
+> **Partly superseded.** This describes the Postgres architecture (on `main`, tagged `db-architecture`). On `monolith/no-db` there is no database, worker, queue or `api` service; see [07-monolith-plan.md](07-monolith-plan.md). The connector notes still apply.
+
 Goal: direct-to-company job aggregator. Ingest from ATS public endpoints, normalize, dedupe, serve via API.
 Everything runs via **Docker Compose** (see `docker-compose.yml`).
 

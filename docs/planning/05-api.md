@@ -1,55 +1,37 @@
 # API and search
 
-Read-only JSON API (`src/app.ts`, started by `src/api.ts`). The machine-readable contract is `GET /openapi.json`; it is rendered from the same parameter table the parser uses (`JOB_PARAMS` in `src/query.ts`), and a unit test fails if the two drift apart. This page covers behaviour that a parameter list can't.
+Read-only JSON API (`src/app.ts`, started by `src/server.ts`) over the jobs held in memory. The machine-readable contract is `GET /api/openapi.json`; its parameter list is rendered from the table the parser uses (`JOB_PARAMS` in `src/query.ts`). This page covers behaviour a parameter list can't. (The Postgres version of this page is on `main`.)
 
 ## Endpoints
 | Endpoint | Purpose |
 |---|---|
-| `GET /jobs` | Search and list **open** jobs (cursor-paginated) |
-| `GET /jobs/:id` | One job with `description_html`; closed jobs are returned too (check `status`) |
-| `GET /facets` | Top filter values with open-job counts (platform, employment_type, seniority, department, location, salary_currency); cached 5 minutes |
-| `GET /stats`, `GET /health` | Operational |
+| `GET /api/jobs` | Search and list jobs (cursor-paginated) |
+| `GET /api/jobs/:id` | One job with `description_html`. `id` is 12 hex characters; `status` is always `open` |
+| `GET /api/facets` | Top 50 values per filter with job counts. Cacheable 5 minutes once the first crawl is done, `no-store` before |
+| `GET /api/stats` | Jobs per platform, source states (`ok`, `pending`, `failing`, `invalid`), crawl progress, memory |
+| `GET /health` (also `/api/health`) | The process is up. Does not wait for the crawl |
+| `GET /api/openapi.json` | OpenAPI 3 spec |
 
-**Paths are served under `/api`** by the real server (`/api/jobs`, `/api/jobs/:id`, `/api/facets`, `/api/stats`, `/api/openapi.json`); this table and the rest of the page use the short form. `/health` is also available at the root. The unprefixed paths now belong to the web UI (`/jobs/:id` is a page, not JSON). The test suite mounts the API without the prefix (`buildApp`), the server with it (`buildServer`).
-| `GET /openapi.json` | OpenAPI 3 spec |
-
-Errors are JSON: `400 {"error":"invalid_query","message":"..."}` (unknown or invalid parameters are rejected, not ignored), `404 {"error":"not_found"}`.
+Errors are JSON: `400 invalid_query` (unknown or invalid parameters are rejected, not ignored), `400 invalid_id`, `404 not_found`.
 
 ## Search
-- `q` uses Postgres `websearch_to_tsquery('english', ...)`: words are AND-ed and stemmed (`developing` finds `developer`), `"quoted phrase"`, `-excluded`, `a or b`. Malformed input never errors; a query of only stop words (e.g. `the`) returns an empty page.
-- Indexed text (generated column `search_tsv`, migration `004_search.sql`): title (weight A) > department and company slug (B) > description with HTML tags/entities stripped (C). Only the first 100,000 characters of a description are indexed, so a huge posting can't make the crawler's INSERT fail.
-- Relevance is `ts_rank_cd` with length normalization, so a short exact-title match beats a long description. Scores are comparable only within one query.
-- `sort` is `relevance` (default with `q`) or `newest` (default without). Newest orders by `posted_at`, falling back to `first_seen` for postings without a date, so undated jobs interleave by when we first saw them instead of sinking to the end.
+- Words in `q` are AND-ed and match the **start of a word** in the title, department, company or description (`java` also finds `javascript`). One and two letter words (`go`, `qa`, and `c` from `c++`) must be whole words.
+- Light suffix stripping (`s`, `es`, `ing`, `ed`): `developing` finds `developer`. This is not real stemming.
+- `"quoted phrase"` is a case-insensitive substring, `-term` excludes, `a or b` separates alternatives (`a b or c` means `(a b) or c`). Stop words are ignored; a query of only stop words returns nothing.
+- Only visible text is searched (tags stripped, entities decoded), at most 20,000 characters per description.
+- Relevance: for each term, `4 x title + 2 x department + 2 x company + 1 x description` hits (description capped at 5), plus 3 for a phrase found in the title. `relevance` appears only when sorting by relevance.
+- `sort` is `relevance` (default with `q`) or `newest` (default without). Newest uses `posted_at`, else `first_seen`.
+- Results are not identical to the Postgres version on `main`.
 
 ## Pagination
-Follow `next_cursor` until it is `null`. Cursors are keyset based: no skipped or repeated rows when jobs are added between requests, and cost doesn't grow with depth. A cursor is bound to the filters and sort that produced it and is rejected (400) if reused with different ones. `offset` still works but is deprecated and capped at 10,000.
+Follow `next_cursor` until it is `null`. A cursor is bound to the filters and sort that produced it (400 otherwise). It marks a position in the ordering, so it keeps working while sources refresh; after a **restart**, undated jobs get a new `first_seen` (unless a snapshot is used), so a held cursor may skip or repeat some. `offset` is deprecated and capped at 10,000.
 
 ## Filter semantics worth knowing
-- `remote=false` means *known* on-site/hybrid; jobs with unknown remote status match neither `true` nor `false`.
-- `min_salary` / `max_salary` match the **range**: a job matches `min_salary=X` if the top of its range is at least X, and `max_salary=Y` if the bottom is at most Y. They require `salary_currency` (amounts in different currencies aren't comparable), and jobs with no structured salary never match. Amounts are the raw advertised numbers; connectors don't normalize hourly/monthly/yearly.
-- `employment_type` and `seniority` are the platform's own labels (not normalized), matched case-insensitively and exactly.
-- `department` and `location` are case-insensitive substring matches; `%` and `_` in the input are matched literally.
-- `distinct=true` keeps one posting per `(company, title, locations)` group (the best-ranked, or newest). Legacy rows without a `dedupe_key` are never merged.
+- `remote=false` means *known* on-site/hybrid; unknown matches neither value.
+- `min_salary` / `max_salary` match the **range** (top at least the minimum, bottom at most the maximum), require `salary_currency`, and never match jobs without a structured salary. Amounts are as advertised (hourly/monthly/yearly are not normalized).
+- `employment_type` and `seniority` are the platform's own labels, case-insensitive exact match.
+- `department` and `location` are case-insensitive substrings, taken literally.
+- `distinct=true` keeps one posting per `(company, title, locations)` group: the one that sorts first.
 
 ## Performance (measured, synthetic data)
-200k rows, 254 MB with indexes, local Postgres 16, real generated SQL under `EXPLAIN ANALYZE`:
-
-| Query | Time |
-|---|---|
-| newest, first page / page 200 via cursor | ~0.13 ms / ~0.12 ms (`offset=10000` for comparison: ~7 ms and growing) |
-| `q` with a rare term (GIN) | ~2 ms |
-| `q` matching ~12% of rows, relevance sort | ~100-140 ms (every match is scored) |
-| `distinct=true` | ~300-400 ms (sorts the open set) |
-
-Synthetic, uniformly distributed text: real distributions will differ. Re-measure after the first large live crawl.
-
-## Migration note
-`004_search.sql` adds two stored generated columns, which rewrites `jobs` once. Fine at this size; on a much larger table run it in a quiet window.
-
-## Testing
-- `npm test` runs the unit tests (query building, cursor encode/decode, SQL placeholder consistency, OpenAPI/parser agreement).
-- The DB-backed tests (`tests/api.db.test.ts`, `app.inject` against real Postgres) only run when `TEST_DATABASE_URL` is set. They `TRUNCATE jobs, sources`, so they never read `DATABASE_URL`, and they refuse to run unless the database name contains `test`.
-  ```bash
-  TEST_DATABASE_URL=postgres://jobsearch:jobsearch@localhost:5432/jobsearch_test npm test
-  ```
-- Covered against real Postgres: ranking, stemming, phrase/exclusion/or, HTML not indexed, hostile `q`, 1.4 MB descriptions, every filter, `%`/`_` literal matching, distinct (incl. null `dedupe_key`), full cursor walks (ties on identical timestamps, microsecond-apart timestamps, equal relevance, distinct) checked against an independent SQL ordering, cursor misuse, `/jobs/:id`, and index eligibility.
+50,000 jobs with about 4 kB of description each, 2-core cloud sandbox, warm: newest and filtered pages under 1 ms; a text query 70-220 ms (every description is scanned, on the same thread that serves requests). That is above the plan's 100 ms target at that size and grows linearly, so around 20,000 jobs it is back under it. The first request after each crawl also re-sorts the list. If it matters, the next step is a per-job word-prefix index. Re-measure on real data.

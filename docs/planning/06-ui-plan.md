@@ -4,6 +4,8 @@ Status: **implemented (U0-U7); two verification gaps remain, listed under "Imple
 
 ## Implementation status
 
+> **Update (monolith branch, see [07](07-monolith-plan.md)):** the UI is now served by the single Node process; "closed" jobs no longer exist; the search page has a "still collecting" notice; the status page counts `ok` sources and shows memory instead of closed jobs. The Playwright suite has now been run (73 passed, 2 skipped by design, on an older Chromium build than the pinned one). The statements below are the earlier record.
+
 **U0 decisions (approved):** internal audience (no auth, rate limiting or takedown page yet; section 8 still applies if that changes); API moved under `/api` (the bare `/jobs/:id` now belongs to the SPA); `/facets` included; capped total count **not** built (the UI says "N jobs loaded, more available").
 
 | Phase | State |

@@ -1,48 +1,48 @@
 # job-search
 
-Direct-to-company job aggregator pulling from ATS public endpoints (no LinkedIn/Indeed).
+Direct-to-company job aggregator pulling from ATS public endpoints (no LinkedIn/Indeed). **One Node process, no database:** it crawls the boards listed in `data/sources.json`, keeps every job in memory, and serves the API and web UI on one port.
 
-## Status
-Phases 0, 1, 6 and 7 done; 2-5 are code-complete but unverified live. The scheduler (adaptive intervals, leases, concurrency, per-job detail cache, maintenance) is verified against real Postgres. Slug discovery (incl. custom-domain detection) is built; Common Crawl ran live for pinpoint and recruitee (see the runbook). Connectors: Recruitee, Personio, Teamtailor, Rippling, BambooHR, Gem, Pinpoint, JazzHR, Jobvite, iCIMS, Taleo (Business Edition), Workday, Y Combinator (all unit-tested). Gem, Pinpoint and Personio response shapes are confirmed against live endpoints (Recruitee probed OK); the rest need live verification, see the checklist. Dover is deferred.
+A restart empties the list until the first crawl finishes (set `SNAPSHOT_FILE` to keep a copy on disk). The earlier Postgres version is on `main`, tagged `db-architecture`.
+
+## Run
+Needs Node 22 (20.19+ works).
+```bash
+npm ci
+npm run build      # builds web/ (its own npm ci included), then the server
+npm start          # http://localhost:8080
+```
+or `docker compose up --build`.
+
+## Sources
+```bash
+npm run cli -- list
+npm run cli -- probe gem superblocks          # live fetch, changes nothing
+npm run cli -- add recruitee <slug>           # probes first, then writes data/sources.json
+npm run cli -- remove recruitee <slug>
+npm run discover -- urls urls.txt --dry       # slug discovery; see the runbook
+```
+The server reads the file at startup: commit the change and restart or redeploy.
+
+## Develop
+```bash
+npm ci && npm run web:install
+npm run dev                          # API on :8080 (restarts on change) + Vite dev server proxying /api
+npm run lint && npm run typecheck && npm test
+npm run web:test                     # UI unit + component tests (jsdom)
+npm run build && (cd web && npx playwright install chromium && npx playwright test)   # browser tests, no network needed
+```
+Layout: `src/connectors/*` (one file per ATS), `src/aggregator.ts` (crawl loop), `src/snapshot.ts`, `src/search.ts` + `src/query.ts`, `src/app.ts` (HTTP), `src/server.ts` (entrypoint), `web/`.
+
+Configuration is by environment variable; every one is listed in `.env.example`.
 
 ## Docs
-- [ATS source research](docs/planning/01-ats-sources.md)
-- [Implementation plan](docs/planning/02-implementation-plan.md)
-- [Verification checklist](docs/planning/03-verification-checklist.md)
+- [Monolith plan, behaviour, status and deploy runbook](docs/planning/07-monolith-plan.md)
+- [API and search](docs/planning/05-api.md) (machine-readable: `GET /api/openapi.json`)
 - [Slug discovery runbook](docs/planning/04-discovery-runbook.md)
-- [API and search](docs/planning/05-api.md) (machine-readable: `GET /openapi.json`)
+- [Verification checklist](docs/planning/03-verification-checklist.md)
+- [ATS source research](docs/planning/01-ats-sources.md)
+- [Web UI plan](docs/planning/06-ui-plan.md)
+- [Original implementation plan](docs/planning/02-implementation-plan.md) (Postgres architecture; partly superseded)
 
-## Run with Docker Compose
-```bash
-cp .env.example .env
-docker compose up --build -d
-docker compose run --rm cli node dist/cli.js add recruitee <slug>
-curl "localhost:8080/jobs?limit=5"
-```
-
-## Local dev
-```bash
-npm install
-npm run lint && npm run typecheck
-npm test
-npm run test:integration   # worker/DB scenarios, needs a throwaway Postgres (see verification checklist)
-TEST_DATABASE_URL=postgres://jobsearch:jobsearch@localhost:5432/jobsearch_test npm test   # also runs the DB-backed API tests (see docs/planning/05-api.md)
-npm run cli -- probe recruitee <slug>   # live fetch, no DB
-npm run discover -- urls urls.txt --dry # slug discovery; see runbook
-```
-Layout: `src/connectors/*` (one file per ATS), `src/worker.ts` (scheduler), `src/api.ts`, `src/store.ts`, `migrations/`.
-
-Detail-cache and per-connector knobs (see `.env.example`): `DETAIL_TTL_HOURS`, `MAX_DETAIL_FETCH`, `WORKDAY_DETAIL_BUDGET`, `ICIMS_MAX_PAGES`, `TALEO_MAX_PAGES`.
-
-## Web UI
-
-React app in `web/`, served by the API container on the same port (UI at `/`, JSON API under `/api`). Spec and status: `docs/planning/06-ui-plan.md`.
-
-```bash
-npm run web:install                      # once
-npm run dev:api &                        # API on :8080
-npm run dev --prefix web                 # Vite dev server, proxies /api to :8080
-npm run web:build && npm run build && node dist/api.js   # production shape: one server on :8080
-npm run web:test                         # unit + component tests (jsdom)
-```
-E2E (needs a Postgres test database and Chromium): `npm run build && npm run web:build`, then `cd web && npx playwright install chromium && TEST_DATABASE_URL=postgres://.../jobsearch_test npx playwright test`.
+## Connector status
+Recruitee, Personio, Teamtailor, Rippling, BambooHR, Gem, Pinpoint, JazzHR, Jobvite, iCIMS, Taleo (Business Edition), Workday, Y Combinator are unit-tested. Gem, Pinpoint and Personio response shapes were confirmed against live endpoints (Recruitee probed OK); the rest need live verification, see the checklist. Dover is deferred.

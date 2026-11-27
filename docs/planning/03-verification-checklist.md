@@ -38,28 +38,24 @@ Known unknowns:
 - [ ] Custom domains: run `discover domains` on a seed list with a few known Recruitee/Personio/Rippling customers that use their own domain, and confirm `/api/offers/` / `/xml` really answer there
 - [ ] Dover: find the real public board endpoint (browser network tab on an `app.dover.com/jobs/{company}` page) before writing a connector
 
-## 2. Docker end-to-end
+## 2. Local end-to-end (monolith)
 ```bash
-cp .env.example .env
-docker compose up --build -d
-docker compose run --rm cli node dist/cli.js add recruitee <slug>
-docker compose logs -f worker
-curl "localhost:8080/jobs?limit=5"
-curl "localhost:8080/health"
+npm ci && npm run build && npm start
+curl localhost:8080/health
+curl localhost:8080/api/stats      # crawl.ready, per-source state
+curl "localhost:8080/api/jobs?limit=5"
 ```
-- [ ] migrate exits 0, worker and api start
-- [ ] jobs appear in `/jobs` after one worker pass
-- [ ] removing a job upstream closes it on the next pass (status = closed)
-
-## 2b. Worker/DB integration test (already passing in my sandbox)
-```bash
-DATABASE_URL=postgres://jobsearch:jobsearch@localhost:5432/jobsearch npm run test:integration
-```
-Needs `psql` and a throwaway database (it TRUNCATEs `jobs` and `sources`!). Stubs `fetch`, so it needs no network.
+- [ ] the three seed sources reach state `ok` with plausible job counts
+- [ ] UI at http://localhost:8080 shows the "Still collecting" notice, then results
+- [ ] search a few real queries and judge the ranking
+- [ ] with `SNAPSHOT_FILE=data/jobs.ndjson.gz`: stop with Ctrl-C, start again, jobs appear immediately
+- [ ] `memory_mb` is acceptable for your source count
+- [ ] `npm run cli -- add <platform> <slug>` then `npm run discover -- cc gem --pages 1 --dry` work against the real internet
+- [ ] `docker compose up --build` (never built: no Docker where this was written)
+- [ ] Render deploy (see [07](07-monolith-plan.md) section 8)
+- [ ] GitHub Actions run is green on this branch
 
 ## 3. Open items / next
-- [x] CI (typecheck, unit + DB-backed tests, worker integration) in `.github/workflows/ci.yml`
-- [x] Lint step (ESLint + typescript-eslint, `npm run lint`, runs in CI after typecheck)
-- [x] Per-job detail cache for BambooHR/JazzHR/Jobvite (see Phase 6 in the implementation plan); the integration test counts detail requests
-- Redis is provisioned but unused (the worker uses Postgres leases instead; consider removing Redis from compose unless a queue/shared rate limit is needed) (reserved for queue/rate-limit/cache); in-memory per-host throttle only for now
-- Still open: live verification of everything above, a live discovery run (blocked in the sandbox that built Phase 4: no DNS for crt.sh/Common Crawl/ATS hosts), the Recruitee token fallback before 2027-02-10, Dover
+- [x] CI: typecheck, lint, backend tests, web tests and build, Playwright (`.github/workflows/ci.yml`)
+- [x] Per-job detail cache (now held in memory; lost on restart unless a snapshot is used)
+- Live verification of the connectors above, the Recruitee token fallback before 2027-02-10, Dover
