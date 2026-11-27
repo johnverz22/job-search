@@ -22,6 +22,8 @@ Vercel has no long-running process, so the API cannot crawl there. Instead a sch
 
 To refresh more often, edit the cron in `crawl.yml`. To add a source, `npm run cli -- add ...`, commit, and the next scheduled crawl picks it up.
 
+Note: Vercel functions do not expand `[param]`/`[...rest]` filenames — every file under `api/` is a literal route. `/api/jobs/<id>` therefore reaches `api/jobs.js` via the rewrite in `vercel.json` (the request path is preserved, so Fastify still routes it to `/api/jobs/:id`).
+
 ## Sources
 ```bash
 npm run cli -- list
