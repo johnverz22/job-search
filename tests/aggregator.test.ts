@@ -83,7 +83,7 @@ describe('crawl loop', () => {
         normalized('stale', { companySlug: 'a', postedAt: '2026-11-19T23:59:59Z' }), // 1s past: dropped
       ],
     });
-    const agg = make([entry('a')], connectors);
+    const agg = make([entry('a')], connectors, { maxJobAgeMs: 7 * 24 * HOUR });
     agg.start();
     await tick();
     expect(agg.all().map((r) => r.externalId).sort()).toEqual(['edge', 'fresh']);
@@ -219,7 +219,7 @@ describe('crawl loop', () => {
   });
 
   it('reads configuration from the environment', () => {
-    expect(optionsFromEnv({})).toEqual({ concurrency: 4, refreshMs: HOUR, staleMs: 72 * HOUR, maxJobAgeMs: 7 * 24 * HOUR, snapshotFile: undefined });
+    expect(optionsFromEnv({})).toEqual({ concurrency: 4, refreshMs: HOUR, staleMs: 72 * HOUR, maxJobAgeMs: 30 * 24 * HOUR, snapshotFile: undefined });
     expect(optionsFromEnv({ CRAWL_CONCURRENCY: '2', REFRESH_MINUTES: '5', STALE_HOURS: 'junk', JOB_MAX_AGE_DAYS: '14', SNAPSHOT_FILE: '/x' }))
       .toEqual({ concurrency: 2, refreshMs: 5 * MIN, staleMs: 72 * HOUR, maxJobAgeMs: 14 * 24 * HOUR, snapshotFile: '/x' });
   });

@@ -38,7 +38,7 @@ export function optionsFromEnv(env: NodeJS.ProcessEnv = process.env): Aggregator
     concurrency: Math.max(1, Math.floor(positive(env.CRAWL_CONCURRENCY, 4))),
     refreshMs: positive(env.REFRESH_MINUTES, 60) * 60_000,
     staleMs: positive(env.STALE_HOURS, 72) * HOUR,
-    maxJobAgeMs: positive(env.JOB_MAX_AGE_DAYS, 7) * DAY,
+    maxJobAgeMs: positive(env.JOB_MAX_AGE_DAYS, 30) * DAY,
     snapshotFile: env.SNAPSHOT_FILE || undefined,
   };
 }
@@ -58,7 +58,7 @@ interface Source {
 
 export function createAggregator(entries: readonly SourceEntry[], opts: AggregatorOptions = {}): Aggregator {
   const {
-    connectors = liveConnectors, concurrency = 4, refreshMs = HOUR, staleMs = 72 * HOUR, maxJobAgeMs = 7 * DAY, snapshotFile,
+    connectors = liveConnectors, concurrency = 4, refreshMs = HOUR, staleMs = 72 * HOUR, maxJobAgeMs = 30 * DAY, snapshotFile,
     stopTimeoutMs = 10_000, random = Math.random, log = console.log,
   } = opts;
 
